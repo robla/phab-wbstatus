@@ -6,6 +6,7 @@ import json
 import datetime
 import dateutil.parser
 import os
+import string
 
 MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
 WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
@@ -66,16 +67,65 @@ def get_workboard_diff(old_workboard, new_workboard):
             diff[key] = (oldvalue, newvalue)
     return diff
 
+def get_activity_for_tasks(phab, tasks):
+    tasknums = [ int(string.lstrip(x,"T")) for x in tasks ]
+    activity = phab.maniphest.gettasktransactions(ids=tasknums)
+    return activity
+
 def main():
-    #phab = phabricator.Phabricator()
+    phab = phabricator.Phabricator()
     #phabcache = populate_phab_cache(phab, MWCORETEAM_PHID)
     #workboardcache = populate_workboard_cache()
     #work_out_workboard_diffs()
     #generate_report()
-    old_workboard = parse_workboard_html(dateutil.parser.parse("2014-12-22T0:00PST"))
-    new_workboard = parse_workboard_html(dateutil.parser.parse("2014-12-23T0:00PST"))
+    start = dateutil.parser.parse("2014-12-22T0:00PST")
+    end = dateutil.parser.parse("2014-12-23T0:00PST")
+    old_workboard = parse_workboard_html(start)
+    new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
-    print json.dumps(diff, indent=4, sort_keys=True)
+    activity = get_activity_for_tasks(phab, diff.keys())
+    #phids = get_phids_from_activity(activity)
+
+    columnmoves = []
+    phids = set()
+    for tasknum, taskfeed in activity.iteritems():
+        for tact in taskfeed:
+            if (tact["transactionType"] == "projectcolumn" and
+                tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
+                item = {}
+                item['timestamp'] = int(tact['dateCreated'])
+                if isinstance(tact['oldValue']['columnPHIDs'], dict):
+                    item['oldValue'] = tact['oldValue']['columnPHIDs'].values()[0]
+                    phids.add(item['oldValue'])
+                else:
+                    item['oldValue'] = None
+                item['newValue'] = tact['newValue']['columnPHIDs'][0]
+                phids.add(item['newValue'])
+                item['authorPHID'] = tact['authorPHID']
+                phids.add(item['authorPHID'])
+                columnmoves.append(item)
+    
+    import pprint
+    pprint.pprint(list(phids), indent=4)
+    phidquery = phab.phid.query(phids=list(phids))
+    for move in columnmoves:
+        time = datetime.datetime.fromtimestamp(move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
+        if move['oldValue']:
+            oldcolumn = phidquery[move['oldValue']]['name']
+        else:
+            oldcolumn = '(none)'
+        newcolumn = phidquery[move['newValue']]['name']
+        author = phidquery[move['authorPHID']]['name']
+        print "{0} {1} {2} {3}".format(time, oldcolumn, newcolumn, author)
+
+    #tasknums = [ int(string.lstrip(x,"T")) for x in diff.keys() ]
+    #print json.dumps(tasknums, sort_keys=True)
+
+
+
+
+
+    #print json.dumps(activity, indent=4, sort_keys=True)
     #print json.dumps(old_workboard, indent=4, sort_keys=True)
     #print json.dumps(new_workboard, indent=4, sort_keys=True)
 
