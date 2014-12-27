@@ -30,29 +30,6 @@ def parse_workboard_html(wbtime):
             retval[objname.string]=state
     return retval
 
-def print_all_project_tasks(phab, projectphid):
-    taskquery = phab.maniphest.query(projectPHIDs=[projectphid])
-
-    for taskphid, task in taskquery.iteritems():
-        print task["id"]
-
-#class PhabCache:
-#    def __init__(phab, MWCORETEAM_PHID):
-        
-
-def populate_phab_cache(phab, MWCORETEAM_PHID):
-    return
-
-def populate_workboard_cache():
-    #bs4_version()
-    return
-
-def work_out_workboard_diffs():
-    return
-
-def generate_report():
-    return
-
 # Take data structures representing the task states in two workboards,
 # and return a dict that contains the tasks for which the state changed
 # between the two workboards.  The contents of each item in the dict
@@ -74,17 +51,12 @@ def get_activity_for_tasks(phab, tasks):
 
 def main():
     phab = phabricator.Phabricator()
-    #phabcache = populate_phab_cache(phab, MWCORETEAM_PHID)
-    #workboardcache = populate_workboard_cache()
-    #work_out_workboard_diffs()
-    #generate_report()
     start = dateutil.parser.parse("2014-12-22T0:00PST")
     end = dateutil.parser.parse("2014-12-23T0:00PST")
     old_workboard = parse_workboard_html(start)
     new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
     activity = get_activity_for_tasks(phab, diff.keys())
-    #phids = get_phids_from_activity(activity)
 
     columnmoves = []
     phids = set()
@@ -104,9 +76,7 @@ def main():
                 item['authorPHID'] = tact['authorPHID']
                 phids.add(item['authorPHID'])
                 columnmoves.append(item)
-    
-    import pprint
-    pprint.pprint(list(phids), indent=4)
+
     phidquery = phab.phid.query(phids=list(phids))
     for move in columnmoves:
         time = datetime.datetime.fromtimestamp(move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
@@ -117,17 +87,6 @@ def main():
         newcolumn = phidquery[move['newValue']]['name']
         author = phidquery[move['authorPHID']]['name']
         print "{0} {1} {2} {3}".format(time, oldcolumn, newcolumn, author)
-
-    #tasknums = [ int(string.lstrip(x,"T")) for x in diff.keys() ]
-    #print json.dumps(tasknums, sort_keys=True)
-
-
-
-
-
-    #print json.dumps(activity, indent=4, sort_keys=True)
-    #print json.dumps(old_workboard, indent=4, sort_keys=True)
-    #print json.dumps(new_workboard, indent=4, sort_keys=True)
 
 main()
 
