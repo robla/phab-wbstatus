@@ -10,7 +10,14 @@ import os
 MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
 WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
 
+# Scrape the HTML for a Phabricator workboard, and return a simple dict
+# that represents the workboard.  The HTML is pre-retrieved via cron job
+# that snarfs the HTML as much as hourly.  This function accesses the 
+# cache via timestamp, which is rounded to the nearest hour in the file
+# name.
 def parse_workboard_html(wbtime):
+    # File name will look something like workboard-2014-12-22T00.html,
+    # which corresponds to midnight on 2014-12-22
     htmlhandle = open(os.path.join(WORKBOARD_HTML_CACHE, 'workboard-{:%Y-%m-%dT%H%Z}.html'.format(wbtime)))
     soup = BeautifulSoup(htmlhandle)
     columns = soup.find_all(class_="phui-workpanel-view")
@@ -45,6 +52,10 @@ def work_out_workboard_diffs():
 def generate_report():
     return
 
+# Take data structures representing the task states in two workboards,
+# and return a dict that contains the tasks for which the state changed
+# between the two workboards.  The contents of each item in the dict
+# should be a tuple with the old state and the new state.
 def get_workboard_diff(old_workboard, new_workboard):
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
     diff = {}
