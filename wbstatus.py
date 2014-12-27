@@ -45,6 +45,15 @@ def work_out_workboard_diffs():
 def generate_report():
     return
 
+def get_workboard_diff(old_workboard, new_workboard):
+    allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
+    diff = {}
+    for key in allkeys:
+        oldvalue = old_workboard.get(key)
+        newvalue = new_workboard.get(key)
+        if oldvalue != newvalue:
+            diff[key] = (oldvalue, newvalue)
+    return diff
 
 def main():
     #phab = phabricator.Phabricator()
@@ -54,14 +63,8 @@ def main():
     #generate_report()
     old_workboard = parse_workboard_html(dateutil.parser.parse("2014-12-22T0:00PST"))
     new_workboard = parse_workboard_html(dateutil.parser.parse("2014-12-23T0:00PST"))
-    allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
-    for key in allkeys:
-        oldvalue = old_workboard.get(key)
-        newvalue = new_workboard.get(key)
-        if oldvalue == newvalue:
-            print "  {0}: {1}".format(key, oldvalue)
-        else:
-            print "* {0}: {1}->{2}".format(key, oldvalue, newvalue)
+    diff = get_workboard_diff(old_workboard, new_workboard)
+    print json.dumps(diff, indent=4, sort_keys=True)
     #print json.dumps(old_workboard, indent=4, sort_keys=True)
     #print json.dumps(new_workboard, indent=4, sort_keys=True)
 
