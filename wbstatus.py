@@ -7,9 +7,11 @@ import datetime
 import dateutil.parser
 import os
 import string
+import pickle
 
 MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
 WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
+WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 
 
 # Scrape the HTML for a Phabricator workboard, and return a simple dict
@@ -48,20 +50,35 @@ def get_workboard_diff(old_workboard, new_workboard):
     return diff
 
 
-def get_activity_for_tasks(phab, tasks):
+def get_activity_for_tasks(phab, phabcache, tasks):
     tasknums = [int(string.lstrip(x, "T")) for x in tasks]
-    activity = phab.maniphest.gettasktransactions(ids=tasknums)
+    activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
+    activity = phabcache.get("gettasktransactions", activityquery)
     return activity
 
+class PhabCache:
+    def __init__(self, cachedir):
+        self.cachedir = cachedir
+        return
+
+    def get(self, key, apicall):
+        picklefile = os.path.join(self.cachedir, key + ".pickle")
+        try:
+            result = pickle.load(open(picklefile))
+        except IOError:
+            result = apicall()
+            pickle.dump(result, open(picklefile, "wb"))
+        return result
 
 def main():
     phab = phabricator.Phabricator()
+    phabcache = PhabCache(WORKBOARD_PICKLE_CACHE)
     start = dateutil.parser.parse("2014-12-22T0:00PST")
     end = dateutil.parser.parse("2014-12-23T0:00PST")
     old_workboard = parse_workboard_html(start)
     new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
-    activity = get_activity_for_tasks(phab, diff.keys())
+    activity = get_activity_for_tasks(phab, phabcache, diff.keys())
 
     columnmoves = []
     phids = set()
@@ -83,7 +100,8 @@ def main():
                 phids.add(item['authorPHID'])
                 columnmoves.append(item)
 
-    phidquery = phab.phid.query(phids=list(phids))
+    phidapifunc = lambda: phab.phid.query(phids=list(phids))
+    phidquery = phabcache.get("phidquery", phidapifunc)
     for move in columnmoves:
         time = datetime.datetime.fromtimestamp(
             move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
