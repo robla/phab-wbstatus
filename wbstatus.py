@@ -95,4 +95,5 @@ def main():
         author = phidquery[move['authorPHID']]['name']
         print "{0} {1} {2} {3}".format(time, oldcolumn, newcolumn, author)
 
-main()
+if __name__ == "__main__":
+    main()
