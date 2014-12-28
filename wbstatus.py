@@ -56,7 +56,9 @@ def get_activity_for_tasks(phab, phabcache, tasks):
     activity = phabcache.get("gettasktransactions", activityquery)
     return activity
 
+
 class PhabCache:
+
     def __init__(self, cachedir):
         self.cachedir = cachedir
         return
@@ -87,10 +89,10 @@ def get_filtered_transactions_for_task(taskfeed):
             item['newValue'] = tact['newValue']
         elif (tact["transactionType"] == "reassign"):
             item['oldValue'] = tact['oldValue']
-            if tact['oldValue'] != None:
+            if not tact['oldValue']:
                 phids.add(item['oldValue'])
             item['newValue'] = tact['newValue']
-            if tact['newValue'] != None:
+            if not tact['newValue']:
                 phids.add(item['newValue'])
         elif (tact["transactionType"] == "projectcolumn" and
                 tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
@@ -108,6 +110,7 @@ def get_filtered_transactions_for_task(taskfeed):
             transactions.append(item)
     return transactions, phids
 
+
 def main():
     phab = phabricator.Phabricator()
     phabcache = PhabCache(WORKBOARD_PICKLE_CACHE)
@@ -118,17 +121,18 @@ def main():
     diff = get_workboard_diff(old_workboard, new_workboard)
     activity = get_activity_for_tasks(phab, phabcache, diff.keys())
 
-    columnmoves = {}
+    transactions = {}
     phids = set()
     for tasknum, taskfeed in activity.iteritems():
-        columnmoves[tasknum], newphids = get_filtered_transactions_for_task(taskfeed)
+        tacts, newphids = get_filtered_transactions_for_task(taskfeed)
+        transactions[tasknum] = tacts
         phids.update(newphids)
 
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
     phidquery = phabcache.get("phidquery", phidapifunc)
-    for task in columnmoves.keys():
+    for task in transactions.keys():
         print "Task T{0}".format(task)
-        for move in columnmoves[task]:
+        for move in transactions[task]:
             time = datetime.datetime.fromtimestamp(
                 move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
             author = phidquery[move['authorPHID']]['name']
@@ -138,11 +142,13 @@ def main():
                 else:
                     oldcolumn = '(none)'
                 newcolumn = phidquery[move['newValue']]['name']
-                print "  {0} {1} Column: '{2}' '{3}'".format(time, author, oldcolumn, newcolumn)
+                print "  {0} {1} Column: '{2}' '{3}'".format(
+                    time, author, oldcolumn, newcolumn)
             elif move['transactionType'] == 'status':
                 oldstatus = str(move['oldValue'])
                 newstatus = move['newValue']
-                print "  {0} {1} Status: '{2}' '{3}'".format(time, author, oldstatus, newstatus)
+                print "  {0} {1} Status: '{2}' '{3}'".format(
+                    time, author, oldstatus, newstatus)
             elif move['transactionType'] == 'reassign':
                 if move['oldValue']:
                     oldassignee = phidquery[move['oldValue']]['name']
@@ -152,7 +158,8 @@ def main():
                     newassignee = phidquery[move['newValue']]['name']
                 else:
                     newassignee = '(unassigned)'
-                print "  {0} {1} Assignee: '{2}' '{3}'".format(time, author, oldassignee, newassignee)
+                print "  {0} {1} Assignee: '{2}' '{3}'".format(
+                    time, author, oldassignee, newassignee)
 
 if __name__ == "__main__":
     main()
