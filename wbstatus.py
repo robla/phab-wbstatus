@@ -77,9 +77,9 @@ class PhabCache:
 # Also return any PHIDs that need to be resolved.
 def get_filtered_transactions_for_task(taskfeed):
     transactions = []
+    phids = set()
     for tact in taskfeed:
         item = {}
-        phids = set()
         item['transactionType'] = tact["transactionType"]
         item['timestamp'] = int(tact['dateCreated'])
         item['authorPHID'] = tact['authorPHID']
@@ -89,10 +89,10 @@ def get_filtered_transactions_for_task(taskfeed):
             item['newValue'] = tact['newValue']
         elif (tact["transactionType"] == "reassign"):
             item['oldValue'] = tact['oldValue']
-            if not tact['oldValue']:
+            if tact['oldValue']:
                 phids.add(item['oldValue'])
             item['newValue'] = tact['newValue']
-            if not tact['newValue']:
+            if tact['newValue']:
                 phids.add(item['newValue'])
         elif (tact["transactionType"] == "projectcolumn" and
                 tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
@@ -150,7 +150,8 @@ def main():
     old_workboard = parse_workboard_html(start)
     new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
-    activity = get_activity_for_tasks(phab, phabcache, diff.keys())
+    allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
+    activity = get_activity_for_tasks(phab, phabcache, allkeys)
 
     transactions = {}
     phids = set()
@@ -158,7 +159,6 @@ def main():
         tacts, newphids = get_filtered_transactions_for_task(taskfeed)
         transactions[tasknum] = tacts
         phids.update(newphids)
-
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
     phidquery = phabcache.get("phidquery", phidapifunc)
     for task in transactions.keys():
