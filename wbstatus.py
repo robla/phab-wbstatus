@@ -70,6 +70,44 @@ class PhabCache:
             pickle.dump(result, open(picklefile, "wb"))
         return result
 
+
+# Return an item if it's relevant to our current search, or {} if it isn't.
+# Also return any PHIDs that need to be resolved.
+def get_filtered_transactions_for_task(taskfeed):
+    transactions = []
+    for tact in taskfeed:
+        item = {}
+        phids = set()
+        item['transactionType'] = tact["transactionType"]
+        item['timestamp'] = int(tact['dateCreated'])
+        item['authorPHID'] = tact['authorPHID']
+        phids.add(item['authorPHID'])
+        if (tact["transactionType"] == "status"):
+            item['oldValue'] = tact['oldValue']
+            item['newValue'] = tact['newValue']
+        elif (tact["transactionType"] == "reassign"):
+            item['oldValue'] = tact['oldValue']
+            if tact['oldValue'] != None:
+                phids.add(item['oldValue'])
+            item['newValue'] = tact['newValue']
+            if tact['newValue'] != None:
+                phids.add(item['newValue'])
+        elif (tact["transactionType"] == "projectcolumn" and
+                tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
+            oldvalphids = tact['oldValue']['columnPHIDs']
+            if isinstance(oldvalphids, dict):
+                item['oldValue'] = oldvalphids.values()[0]
+                phids.add(item['oldValue'])
+            else:
+                item['oldValue'] = None
+            item['newValue'] = tact['newValue']['columnPHIDs'][0]
+            phids.add(item['newValue'])
+        else:
+            item = {}
+        if item:
+            transactions.append(item)
+    return transactions, phids
+
 def main():
     phab = phabricator.Phabricator()
     phabcache = PhabCache(WORKBOARD_PICKLE_CACHE)
@@ -83,46 +121,8 @@ def main():
     columnmoves = {}
     phids = set()
     for tasknum, taskfeed in activity.iteritems():
-        columnmoves[tasknum] = []
-        for tact in taskfeed:
-            if (tact["transactionType"] == "status"):
-                item = {}
-                item['transactionType'] = tact["transactionType"]
-                item['timestamp'] = int(tact['dateCreated'])
-                item['oldValue'] = tact['oldValue']
-                item['newValue'] = tact['newValue']
-                item['authorPHID'] = tact['authorPHID']
-                phids.add(item['authorPHID'])
-                columnmoves[tasknum].append(item)
-            elif (tact["transactionType"] == "reassign"):
-                item = {}
-                item['transactionType'] = tact["transactionType"]
-                item['timestamp'] = int(tact['dateCreated'])
-                item['oldValue'] = tact['oldValue']
-                if tact['oldValue'] != None:
-                    phids.add(item['oldValue'])
-                item['newValue'] = tact['newValue']
-                if tact['newValue'] != None:
-                    phids.add(item['newValue'])
-                item['authorPHID'] = tact['authorPHID']
-                phids.add(item['authorPHID'])
-                columnmoves[tasknum].append(item)
-            elif (tact["transactionType"] == "projectcolumn" and
-                    tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
-                item = {}
-                item['transactionType'] = tact["transactionType"]
-                item['timestamp'] = int(tact['dateCreated'])
-                if isinstance(tact['oldValue']['columnPHIDs'], dict):
-                    item['oldValue'] = tact['oldValue'][
-                        'columnPHIDs'].values()[0]
-                    phids.add(item['oldValue'])
-                else:
-                    item['oldValue'] = None
-                item['newValue'] = tact['newValue']['columnPHIDs'][0]
-                phids.add(item['newValue'])
-                item['authorPHID'] = tact['authorPHID']
-                phids.add(item['authorPHID'])
-                columnmoves[tasknum].append(item)
+        columnmoves[tasknum], newphids = get_filtered_transactions_for_task(taskfeed)
+        phids.update(newphids)
 
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
     phidquery = phabcache.get("phidquery", phidapifunc)
