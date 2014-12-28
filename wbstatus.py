@@ -80,13 +80,37 @@ def main():
     diff = get_workboard_diff(old_workboard, new_workboard)
     activity = get_activity_for_tasks(phab, phabcache, diff.keys())
 
-    columnmoves = []
+    columnmoves = {}
     phids = set()
     for tasknum, taskfeed in activity.iteritems():
+        columnmoves[tasknum] = []
         for tact in taskfeed:
-            if (tact["transactionType"] == "projectcolumn" and
+            if (tact["transactionType"] == "status"):
+                item = {}
+                item['transactionType'] = tact["transactionType"]
+                item['timestamp'] = int(tact['dateCreated'])
+                item['oldValue'] = tact['oldValue']
+                item['newValue'] = tact['newValue']
+                item['authorPHID'] = tact['authorPHID']
+                phids.add(item['authorPHID'])
+                columnmoves[tasknum].append(item)
+            elif (tact["transactionType"] == "reassign"):
+                item = {}
+                item['transactionType'] = tact["transactionType"]
+                item['timestamp'] = int(tact['dateCreated'])
+                item['oldValue'] = tact['oldValue']
+                if tact['oldValue'] != None:
+                    phids.add(item['oldValue'])
+                item['newValue'] = tact['newValue']
+                if tact['newValue'] != None:
+                    phids.add(item['newValue'])
+                item['authorPHID'] = tact['authorPHID']
+                phids.add(item['authorPHID'])
+                columnmoves[tasknum].append(item)
+            elif (tact["transactionType"] == "projectcolumn" and
                     tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
                 item = {}
+                item['transactionType'] = tact["transactionType"]
                 item['timestamp'] = int(tact['dateCreated'])
                 if isinstance(tact['oldValue']['columnPHIDs'], dict):
                     item['oldValue'] = tact['oldValue'][
@@ -98,20 +122,37 @@ def main():
                 phids.add(item['newValue'])
                 item['authorPHID'] = tact['authorPHID']
                 phids.add(item['authorPHID'])
-                columnmoves.append(item)
+                columnmoves[tasknum].append(item)
 
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
     phidquery = phabcache.get("phidquery", phidapifunc)
-    for move in columnmoves:
-        time = datetime.datetime.fromtimestamp(
-            move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
-        if move['oldValue']:
-            oldcolumn = phidquery[move['oldValue']]['name']
-        else:
-            oldcolumn = '(none)'
-        newcolumn = phidquery[move['newValue']]['name']
-        author = phidquery[move['authorPHID']]['name']
-        print "{0} {1} {2} {3}".format(time, oldcolumn, newcolumn, author)
+    for task in columnmoves.keys():
+        print "Task T{0}".format(task)
+        for move in columnmoves[task]:
+            time = datetime.datetime.fromtimestamp(
+                move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
+            author = phidquery[move['authorPHID']]['name']
+            if move['transactionType'] == 'projectcolumn':
+                if move['oldValue']:
+                    oldcolumn = phidquery[move['oldValue']]['name']
+                else:
+                    oldcolumn = '(none)'
+                newcolumn = phidquery[move['newValue']]['name']
+                print "  {0} {1} Column: '{2}' '{3}'".format(time, author, oldcolumn, newcolumn)
+            elif move['transactionType'] == 'status':
+                oldstatus = str(move['oldValue'])
+                newstatus = move['newValue']
+                print "  {0} {1} Status: '{2}' '{3}'".format(time, author, oldstatus, newstatus)
+            elif move['transactionType'] == 'reassign':
+                if move['oldValue']:
+                    oldassignee = phidquery[move['oldValue']]['name']
+                else:
+                    oldassignee = '(unassigned)'
+                if move['newValue']:
+                    newassignee = phidquery[move['newValue']]['name']
+                else:
+                    newassignee = '(unassigned)'
+                print "  {0} {1} Assignee: '{2}' '{3}'".format(time, author, oldassignee, newassignee)
 
 if __name__ == "__main__":
     main()
