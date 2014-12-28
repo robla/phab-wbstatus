@@ -111,6 +111,37 @@ def get_filtered_transactions_for_task(taskfeed):
     return transactions, phids
 
 
+def render_transaction(tact, phidquery):
+    time = datetime.datetime.fromtimestamp(
+        tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
+    author = phidquery[tact['authorPHID']]['name']
+    if tact['transactionType'] == 'projectcolumn':
+        if tact['oldValue']:
+            oldcolumn = phidquery[tact['oldValue']]['name']
+        else:
+            oldcolumn = '(none)'
+        newcolumn = phidquery[tact['newValue']]['name']
+        retval = "  {0} {1} Column: '{2}' '{3}'".format(
+            time, author, oldcolumn, newcolumn)
+    elif tact['transactionType'] == 'status':
+        oldstatus = str(tact['oldValue'])
+        newstatus = tact['newValue']
+        retval = "  {0} {1} Status: '{2}' '{3}'".format(
+            time, author, oldstatus, newstatus)
+    elif tact['transactionType'] == 'reassign':
+        if tact['oldValue']:
+            oldassignee = phidquery[tact['oldValue']]['name']
+        else:
+            oldassignee = '(unassigned)'
+        if tact['newValue']:
+            newassignee = phidquery[tact['newValue']]['name']
+        else:
+            newassignee = '(unassigned)'
+        retval = "  {0} {1} Assignee: '{2}' '{3}'".format(
+            time, author, oldassignee, newassignee)
+    return retval
+
+
 def main():
     phab = phabricator.Phabricator()
     phabcache = PhabCache(WORKBOARD_PICKLE_CACHE)
@@ -132,34 +163,8 @@ def main():
     phidquery = phabcache.get("phidquery", phidapifunc)
     for task in transactions.keys():
         print "Task T{0}".format(task)
-        for move in transactions[task]:
-            time = datetime.datetime.fromtimestamp(
-                move['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
-            author = phidquery[move['authorPHID']]['name']
-            if move['transactionType'] == 'projectcolumn':
-                if move['oldValue']:
-                    oldcolumn = phidquery[move['oldValue']]['name']
-                else:
-                    oldcolumn = '(none)'
-                newcolumn = phidquery[move['newValue']]['name']
-                print "  {0} {1} Column: '{2}' '{3}'".format(
-                    time, author, oldcolumn, newcolumn)
-            elif move['transactionType'] == 'status':
-                oldstatus = str(move['oldValue'])
-                newstatus = move['newValue']
-                print "  {0} {1} Status: '{2}' '{3}'".format(
-                    time, author, oldstatus, newstatus)
-            elif move['transactionType'] == 'reassign':
-                if move['oldValue']:
-                    oldassignee = phidquery[move['oldValue']]['name']
-                else:
-                    oldassignee = '(unassigned)'
-                if move['newValue']:
-                    newassignee = phidquery[move['newValue']]['name']
-                else:
-                    newassignee = '(unassigned)'
-                print "  {0} {1} Assignee: '{2}' '{3}'".format(
-                    time, author, oldassignee, newassignee)
+        for tact in transactions[task]:
+            print render_transaction(tact, phidquery)
 
 if __name__ == "__main__":
     main()
