@@ -50,28 +50,25 @@ def get_workboard_diff(old_workboard, new_workboard):
     return diff
 
 
-def get_activity_for_tasks(phab, phabcache, tasks):
+def get_activity_for_tasks(phab, cachedir, tasks):
     tasknums = [int(string.lstrip(x, "T")) for x in tasks]
     activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
-    activity = phabcache.get("gettasktransactions", activityquery)
+    activity = call_phab_via_cache(cachedir, "gettasktransactions", activityquery)
     return activity
 
 
-class PhabCache:
-
-    def __init__(self, cachedir):
-        self.cachedir = cachedir
-        return
-
-    def get(self, key, apicall):
-        picklefile = os.path.join(self.cachedir, key + ".pickle")
-        try:
-            result = pickle.load(open(picklefile))
-        except IOError:
-            result = apicall()
-            pickle.dump(result, open(picklefile, "wb"))
-        return result
-
+# Really lame overzealous caching implementation that's only currently
+# useful as a developer convenience.  It stores queries to Phabricator
+# based on named token.  Purging is entirely manual, even if the query
+# changes (no signature checking).
+def call_phab_via_cache(cachedir, key, apicall):
+    picklefile = os.path.join(cachedir, key + ".pickle")
+    try:
+        result = pickle.load(open(picklefile))
+    except IOError:
+        result = apicall()
+        pickle.dump(result, open(picklefile, "wb"))
+    return result
 
 # Return an item if it's relevant to our current search, or {} if it isn't.
 # Also return any PHIDs that need to be resolved.
@@ -165,14 +162,14 @@ def render_transaction(tact, phidquery):
 
 def main():
     phab = phabricator.Phabricator()
-    phabcache = PhabCache(WORKBOARD_PICKLE_CACHE)
+    cachedir = WORKBOARD_PICKLE_CACHE
     start = dateutil.parser.parse("2014-12-22T0:00PST")
     end = dateutil.parser.parse("2014-12-23T0:00PST")
     old_workboard = parse_workboard_html(start)
     new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
-    activity = get_activity_for_tasks(phab, phabcache, allkeys)
+    activity = get_activity_for_tasks(phab, cachedir, allkeys)
 
     transactions = {}
     phids = set()
@@ -193,7 +190,7 @@ def main():
                 actortasks[actor] = [task]
 
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
-    phidquery = phabcache.get("phidquery", phidapifunc)
+    phidquery = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
     for actor, tasklist in actortasks.iteritems():
         print "Actor: " + phidquery[actor]['name']
         for task in tasklist:
