@@ -53,7 +53,8 @@ def get_workboard_diff(old_workboard, new_workboard):
 def get_activity_for_tasks(phab, cachedir, tasks):
     tasknums = [int(string.lstrip(x, "T")) for x in tasks]
     activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
-    activity = call_phab_via_cache(cachedir, "gettasktransactions", activityquery)
+    activity = call_phab_via_cache(
+        cachedir, "gettasktransactions", activityquery)
     return activity
 
 
@@ -72,6 +73,8 @@ def call_phab_via_cache(cachedir, key, apicall):
 
 # Return an item if it's relevant to our current search, or {} if it isn't.
 # Also return any PHIDs that need to be resolved.
+
+
 def get_filtered_transactions_for_task(taskfeed):
     transactions = []
     phids = set()
@@ -113,12 +116,12 @@ def process_transactions(transactions, start, end):
     taskstate['actorset'] = set()
     for tact in transactions:
         ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
-            dateutil.tz.tzutc())
+                                                dateutil.tz.tzutc())
         if ttime > end:
             break
         if tact['authorPHID']:
             if ttime > start and ttime < end:
-                taskstate['actorset'].add(tact['authorPHID']) 
+                taskstate['actorset'].add(tact['authorPHID'])
         if tact['transactionType'] == 'projectcolumn':
             taskstate['column'] = tact['newValue']
         elif tact['transactionType'] == 'status':
@@ -128,6 +131,7 @@ def process_transactions(transactions, start, end):
             if tact['newValue']:
                 taskstate['actorset'].add(tact['newValue'])
     return taskstate
+
 
 def render_transaction(tact, phidquery):
     time = datetime.datetime.fromtimestamp(
@@ -197,7 +201,7 @@ def main():
             print "  Task T{0}".format(task)
             for tact in transactions[task]:
                 ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
-                    dateutil.tz.tzutc())
+                                                        dateutil.tz.tzutc())
                 if ttime > start and ttime < end:
                     print "  " + render_transaction(tact, phidquery)
 
