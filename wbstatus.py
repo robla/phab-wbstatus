@@ -111,6 +111,25 @@ def get_filtered_transactions_for_task(taskfeed):
     return transactions, phids
 
 
+def process_transactions(transactions):
+    taskstate = {}
+    taskstate['actorset'] = set()
+    for tact in transactions:
+        #time = datetime.datetime.fromtimestamp(
+        #    tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
+        #author = phidquery[tact['authorPHID']]['name']
+        if tact['authorPHID']:
+            taskstate['actorset'].add(tact['authorPHID']) 
+        if tact['transactionType'] == 'projectcolumn':
+            taskstate['column'] = tact['newValue']
+        elif tact['transactionType'] == 'status':
+            taskstate['status'] = tact['newValue']
+        elif tact['transactionType'] == 'reassign':
+            taskstate['assignee'] = tact['newValue']
+            if tact['newValue']:
+                taskstate['actorset'].add(tact['newValue'])
+    return taskstate
+
 def render_transaction(tact, phidquery):
     time = datetime.datetime.fromtimestamp(
         tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
@@ -159,12 +178,26 @@ def main():
         tacts, newphids = get_filtered_transactions_for_task(taskfeed)
         transactions[tasknum] = tacts
         phids.update(newphids)
+
+    actortasks = {}
+    taskstate = {}
+    for task in transactions.keys():
+        taskstate[task] = process_transactions(transactions[task])
+        for actor in taskstate[task]['actorset']:
+            assert actor
+            if actortasks.get(actor):
+                actortasks[actor].append(task)
+            else:
+                actortasks[actor] = [task]
+
     phidapifunc = lambda: phab.phid.query(phids=list(phids))
     phidquery = phabcache.get("phidquery", phidapifunc)
-    for task in transactions.keys():
-        print "Task T{0}".format(task)
-        for tact in transactions[task]:
-            print render_transaction(tact, phidquery)
+    for actor, tasklist in actortasks.iteritems():
+        print "Actor: " + phidquery[actor]['name']
+        for task in tasklist:
+            print "  Task T{0}".format(task)
+            for tact in transactions[task]:
+                print "  " + render_transaction(tact, phidquery)
 
 if __name__ == "__main__":
     main()
