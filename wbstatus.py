@@ -111,15 +111,17 @@ def get_filtered_transactions_for_task(taskfeed):
     return transactions, phids
 
 
-def process_transactions(transactions):
+def process_transactions(transactions, start, end):
     taskstate = {}
     taskstate['actorset'] = set()
     for tact in transactions:
-        #time = datetime.datetime.fromtimestamp(
-        #    tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
-        #author = phidquery[tact['authorPHID']]['name']
+        ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
+            dateutil.tz.tzutc())
+        if ttime > end:
+            break
         if tact['authorPHID']:
-            taskstate['actorset'].add(tact['authorPHID']) 
+            if ttime > start and ttime < end:
+                taskstate['actorset'].add(tact['authorPHID']) 
         if tact['transactionType'] == 'projectcolumn':
             taskstate['column'] = tact['newValue']
         elif tact['transactionType'] == 'status':
@@ -182,7 +184,7 @@ def main():
     actortasks = {}
     taskstate = {}
     for task in transactions.keys():
-        taskstate[task] = process_transactions(transactions[task])
+        taskstate[task] = process_transactions(transactions[task], start, end)
         for actor in taskstate[task]['actorset']:
             assert actor
             if actortasks.get(actor):
@@ -197,7 +199,10 @@ def main():
         for task in tasklist:
             print "  Task T{0}".format(task)
             for tact in transactions[task]:
-                print "  " + render_transaction(tact, phidquery)
+                ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
+                    dateutil.tz.tzutc())
+                if ttime > start and ttime < end:
+                    print "  " + render_transaction(tact, phidquery)
 
 if __name__ == "__main__":
     main()
