@@ -145,8 +145,8 @@ def process_transactions(transactions, start, end):
             taskstate['status'] = tact['newValue']
         elif tact['transactionType'] == 'reassign':
             taskstate['assignee'] = tact['newValue']
-            if tact['newValue']:
-                taskstate['actorset'].add(tact['newValue'])
+    if taskstate.get('assignee'):
+        taskstate['actorset'].add(taskstate['assignee'])
     return taskstate
 
 
@@ -154,14 +154,16 @@ def render_transaction(tact, phidstore):
     time = datetime.datetime.fromtimestamp(
         tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
     author = phidstore.name(tact['authorPHID'])
+    retval = ""
     if tact['transactionType'] == 'projectcolumn':
         if tact['oldValue']:
             oldcolumn = phidstore.name(tact['oldValue'])
         else:
             oldcolumn = '(none)'
         newcolumn = phidstore.name(tact['newValue'])
-        retval = "  {0} {1} Column: '{2}' '{3}'".format(
-            time, author, oldcolumn, newcolumn)
+        if oldcolumn != newcolumn:
+            retval = "  {0} {1} Column: '{2}' '{3}'".format(
+                time, author, oldcolumn, newcolumn)
     elif tact['transactionType'] == 'status':
         oldstatus = str(tact['oldValue'])
         newstatus = tact['newValue']
@@ -181,7 +183,7 @@ def render_transaction(tact, phidstore):
     return retval
 
 
-def render_actor(actor, tasklist, phidstore, transactions, start, end):
+def render_actor(actor, tasklist, phidstore, transactions, start, end, taskstate):
     retval = "Actor: " + phidstore.name(actor) + "\n"
     for task in tasklist:
         retval += "  Task T{0}".format(task) + "\n"
@@ -189,7 +191,10 @@ def render_actor(actor, tasklist, phidstore, transactions, start, end):
             ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
                                                     dateutil.tz.tzutc())
             if ttime > start and ttime < end:
-                retval += "  " + render_transaction(tact, phidstore) + "\n"
+                retval += "  "
+                retval += render_transaction(tact, phidstore) + "\n"
+        if task.get('assignee') == actor:
+            retval += task['actorset'].add(task['assignee'])
     return retval
 
 
@@ -224,7 +229,7 @@ def main():
     phidstore.load_from_phabricator(phab, cachedir)
     for actor, tasklist in actortasks.iteritems():
         print render_actor(actor, tasklist, phidstore,
-                           transactions, start, end),
+                           transactions, start, end, taskstate),
 
 if __name__ == "__main__":
     main()
