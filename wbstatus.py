@@ -21,6 +21,7 @@ WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 class PhidStore(object):
     def __init__(self):
         self.phids = set()
+        self.users = {}
 
     def add(self, phid):
         self.phids.add(phid)
@@ -32,6 +33,23 @@ class PhidStore(object):
     def name(self, phid):
         return self.query[phid]['name']
 
+    def get_user(self, phid):
+        retval = self.users.get(phid)
+        if not retval:
+            retval = self.users[phid] = User(phid)
+            retval.phidstore = self
+        return retval
+
+
+class User(object):
+    def __init__(self, phid):
+        self.phid = phid
+        self.tasks = []
+        self.phidstore = None
+
+    @property
+    def name(self):
+        return self.phidstore.name(self.phid)
 
 # Scrape the HTML for a Phabricator workboard, and return a simple dict
 # that represents the workboard.  The HTML is pre-retrieved via cron job
@@ -183,9 +201,9 @@ def render_transaction(tact, phidstore):
     return retval
 
 
-def render_actor(actor, tasklist, phidstore, transactions, start, end, taskstate):
-    retval = "Actor: " + phidstore.name(actor) + "\n"
-    for task in tasklist:
+def render_actor(actor, phidstore, transactions, start, end, taskstate):
+    retval = "Actor: " + actor.name + "\n"
+    for task in actor.tasks:
         retval += "  Task T{0}".format(task) + "\n"
         for tact in transactions[task]:
             ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
@@ -193,7 +211,7 @@ def render_actor(actor, tasklist, phidstore, transactions, start, end, taskstate
             if ttime > start and ttime < end:
                 retval += "  "
                 retval += render_transaction(tact, phidstore) + "\n"
-        if task.get('assignee') == actor:
+        if taskstate[task].get('assignee') == actor:
             retval += task['actorset'].add(task['assignee'])
     return retval
 
@@ -215,21 +233,16 @@ def main():
         tacts = get_filtered_transactions_for_task(taskfeed, phidstore)
         transactions[tasknum] = tacts
 
-    actortasks = {}
     taskstate = {}
     for task in transactions.keys():
         taskstate[task] = process_transactions(transactions[task], start, end)
-        for actor in taskstate[task]['actorset']:
-            assert actor
-            if actortasks.get(actor):
-                actortasks[actor].append(task)
-            else:
-                actortasks[actor] = [task]
+        for actorphid in taskstate[task]['actorset']:
+            assert actorphid
+            phidstore.get_user(actorphid).tasks.append(task)
 
     phidstore.load_from_phabricator(phab, cachedir)
-    for actor, tasklist in actortasks.iteritems():
-        print render_actor(actor, tasklist, phidstore,
-                           transactions, start, end, taskstate),
+    for phid, actor in phidstore.users.iteritems():
+        print render_actor(actor, phidstore, transactions, start, end, taskstate),
 
 if __name__ == "__main__":
     main()
