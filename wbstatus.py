@@ -181,6 +181,18 @@ def render_transaction(tact, phidstore):
     return retval
 
 
+def render_actor(actor, tasklist, phidstore, transactions, start, end):
+    retval = "Actor: " + phidstore.name(actor) + "\n"
+    for task in tasklist:
+        retval += "  Task T{0}".format(task) + "\n"
+        for tact in transactions[task]:
+            ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
+                                                    dateutil.tz.tzutc())
+            if ttime > start and ttime < end:
+                retval += "  " + render_transaction(tact, phidstore) + "\n"
+    return retval
+
+
 def main():
     phab = phabricator.Phabricator()
     cachedir = WORKBOARD_PICKLE_CACHE
@@ -211,14 +223,8 @@ def main():
 
     phidstore.load_from_phabricator(phab, cachedir)
     for actor, tasklist in actortasks.iteritems():
-        print "Actor: " + phidstore.name(actor)
-        for task in tasklist:
-            print "  Task T{0}".format(task)
-            for tact in transactions[task]:
-                ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
-                                                        dateutil.tz.tzutc())
-                if ttime > start and ttime < end:
-                    print "  " + render_transaction(tact, phidstore)
+        print render_actor(actor, tasklist, phidstore,
+                           transactions, start, end),
 
 if __name__ == "__main__":
     main()
