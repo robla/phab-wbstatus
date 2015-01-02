@@ -14,6 +14,25 @@ WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
 WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 
 
+# Keep track of all of the objects with associated PHIDs.  Aggregate all of
+# PHIDs so that we only need to make one call to Phabricator.phid.query to
+# lookup a big batch of PHIDs, rather than making dozens/hundreds of calls to
+# look them up one at a time.
+class PhidStore(object):
+    def __init__(self):
+        self.phids = set()
+
+    def add(self, phid):
+        self.phids.add(phid)
+
+    def load_from_phabricator(self, phab, cachedir):
+        phidapifunc = lambda: phab.phid.query(phids=list(phids))
+        self.query = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
+
+    def name(self, phid):
+        return self.query[phid]['name']
+
+
 # Scrape the HTML for a Phabricator workboard, and return a simple dict
 # that represents the workboard.  The HTML is pre-retrieved via cron job
 # that snarfs the HTML as much as hourly.  This function accesses the
@@ -71,44 +90,42 @@ def call_phab_via_cache(cachedir, key, apicall):
         pickle.dump(result, open(picklefile, "wb"))
     return result
 
+
 # Return an item if it's relevant to our current search, or {} if it isn't.
-# Also return any PHIDs that need to be resolved.
-
-
-def get_filtered_transactions_for_task(taskfeed):
+# Also populate the PHIDs that will eventually need to be resolved.
+def get_filtered_transactions_for_task(taskfeed, phidstore):
     transactions = []
-    phids = set()
     for tact in taskfeed:
         item = {}
         item['transactionType'] = tact["transactionType"]
         item['timestamp'] = int(tact['dateCreated'])
         item['authorPHID'] = tact['authorPHID']
-        phids.add(item['authorPHID'])
+        phidstore.add(item['authorPHID'])
         if (tact["transactionType"] == "status"):
             item['oldValue'] = tact['oldValue']
             item['newValue'] = tact['newValue']
         elif (tact["transactionType"] == "reassign"):
             item['oldValue'] = tact['oldValue']
             if tact['oldValue']:
-                phids.add(item['oldValue'])
+                phidstore.add(item['oldValue'])
             item['newValue'] = tact['newValue']
             if tact['newValue']:
-                phids.add(item['newValue'])
+                phidstore.add(item['newValue'])
         elif (tact["transactionType"] == "projectcolumn" and
                 tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
             oldvalphids = tact['oldValue']['columnPHIDs']
             if isinstance(oldvalphids, dict):
                 item['oldValue'] = oldvalphids.values()[0]
-                phids.add(item['oldValue'])
+                phidstore.add(item['oldValue'])
             else:
                 item['oldValue'] = None
             item['newValue'] = tact['newValue']['columnPHIDs'][0]
-            phids.add(item['newValue'])
+            phidstore.add(item['newValue'])
         else:
             item = {}
         if item:
             transactions.append(item)
-    return transactions, phids
+    return transactions
 
 
 def process_transactions(transactions, start, end):
@@ -133,16 +150,16 @@ def process_transactions(transactions, start, end):
     return taskstate
 
 
-def render_transaction(tact, phidquery):
+def render_transaction(tact, phidstore):
     time = datetime.datetime.fromtimestamp(
         tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
-    author = phidquery[tact['authorPHID']]['name']
+    author = phidstore.name(tact['authorPHID'])
     if tact['transactionType'] == 'projectcolumn':
         if tact['oldValue']:
-            oldcolumn = phidquery[tact['oldValue']]['name']
+            oldcolumn = phidstore.name(tact['oldValue'])
         else:
             oldcolumn = '(none)'
-        newcolumn = phidquery[tact['newValue']]['name']
+        newcolumn = phidstore.name(tact['newValue'])
         retval = "  {0} {1} Column: '{2}' '{3}'".format(
             time, author, oldcolumn, newcolumn)
     elif tact['transactionType'] == 'status':
@@ -152,11 +169,11 @@ def render_transaction(tact, phidquery):
             time, author, oldstatus, newstatus)
     elif tact['transactionType'] == 'reassign':
         if tact['oldValue']:
-            oldassignee = phidquery[tact['oldValue']]['name']
+            oldassignee = phidstore.name(tact['oldValue'])
         else:
             oldassignee = '(unassigned)'
         if tact['newValue']:
-            newassignee = phidquery[tact['newValue']]['name']
+            newassignee = phidstore.name(tact['newValue'])
         else:
             newassignee = '(unassigned)'
         retval = "  {0} {1} Assignee: '{2}' '{3}'".format(
@@ -176,11 +193,10 @@ def main():
     activity = get_activity_for_tasks(phab, cachedir, allkeys)
 
     transactions = {}
-    phids = set()
+    phidstore = PhidStore()
     for tasknum, taskfeed in activity.iteritems():
-        tacts, newphids = get_filtered_transactions_for_task(taskfeed)
+        tacts = get_filtered_transactions_for_task(taskfeed, phidstore)
         transactions[tasknum] = tacts
-        phids.update(newphids)
 
     actortasks = {}
     taskstate = {}
@@ -193,17 +209,16 @@ def main():
             else:
                 actortasks[actor] = [task]
 
-    phidapifunc = lambda: phab.phid.query(phids=list(phids))
-    phidquery = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
+    phidstore.load_from_phabricator(phab, cachedir)
     for actor, tasklist in actortasks.iteritems():
-        print "Actor: " + phidquery[actor]['name']
+        print "Actor: " + phidstore.name(actor)
         for task in tasklist:
             print "  Task T{0}".format(task)
             for tact in transactions[task]:
                 ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
                                                         dateutil.tz.tzutc())
                 if ttime > start and ttime < end:
-                    print "  " + render_transaction(tact, phidquery)
+                    print "  " + render_transaction(tact, phidstore)
 
 if __name__ == "__main__":
     main()
