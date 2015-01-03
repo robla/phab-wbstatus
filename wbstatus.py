@@ -9,6 +9,9 @@ import os
 import string
 import pickle
 
+from datetime import datetime as dt
+from dateutil import tz
+
 MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
 WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
 WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
@@ -146,30 +149,51 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
     return transactions
 
 
-def process_transactions(transactions, start, end):
+def build_taskstate_from_transactions(transactions, start, end):
     taskstate = {}
     taskstate['actorset'] = set()
     for tact in transactions:
-        ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
-                                                dateutil.tz.tzutc())
+        ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
         if ttime > end:
             break
-        if tact['authorPHID']:
-            if ttime > start and ttime < end:
-                taskstate['actorset'].add(tact['authorPHID'])
+        # For each type, build the "old" and "new" state along the 
+        # interval defined by the start and end variables
+        # For example:
+        # a->b
+        # b->c
+        # ---START
+        # c->d
+        # d->e
+        # ---END
+        # Old should be "c" and new should be "e"
+        # TODO: make a unit test out of this
         if tact['transactionType'] == 'projectcolumn':
+            if ttime >= start and not taskstate.get('column'):
+                taskstate['oldcolumn'] = tact['oldValue']
+            elif ttime < start:
+                taskstate['oldcolumn'] = tact['newValue']
             taskstate['column'] = tact['newValue']
         elif tact['transactionType'] == 'status':
+            if ttime >= start and not taskstate.get('status'):
+                taskstate['oldstatus'] = tact['oldValue']
+            elif ttime < start:
+                taskstate['oldstatus'] = tact['newValue']
             taskstate['status'] = tact['newValue']
         elif tact['transactionType'] == 'reassign':
+            if ttime >= start and not taskstate.get('assignee'):
+                taskstate['oldassignee'] = tact['oldValue']
+            elif ttime < start:
+                taskstate['oldassignee'] = tact['newValue']
             taskstate['assignee'] = tact['newValue']
+        if ttime > start and tact['authorPHID']:
+            taskstate['actorset'].add(tact['authorPHID'])
     if taskstate.get('assignee'):
         taskstate['actorset'].add(taskstate['assignee'])
     return taskstate
 
 
 def render_transaction(tact, phidstore):
-    time = datetime.datetime.fromtimestamp(
+    time = dt.fromtimestamp(
         tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
     author = phidstore.name(tact['authorPHID'])
     retval = ""
@@ -204,15 +228,27 @@ def render_transaction(tact, phidstore):
 def render_actor(actor, phidstore, transactions, start, end, taskstate):
     retval = "Actor: " + actor.name + "\n"
     for task in actor.tasks:
-        retval += "  Task T{0}".format(task) + "\n"
-        for tact in transactions[task]:
-            ttime = datetime.datetime.fromtimestamp(tact['timestamp'],
-                                                    dateutil.tz.tzutc())
-            if ttime > start and ttime < end:
-                retval += "  "
-                retval += render_transaction(tact, phidstore) + "\n"
+        #retval += "  Task T{0}".format(task) + "\n"
+        #for tact in transactions[task]:
+            #ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
+            #if ttime > start and ttime < end:
+                #retval += "  "
+                #retval += render_transaction(tact, phidstore) + "\n"
+        if (taskstate[task].get('oldassignee') == actor.phid and
+            taskstate[task].get('assignee') != actor.phid):
+            retval += "  Unassigned from T" + task + "\n"
+        if (taskstate[task].get('oldassignee') != actor.phid and
+            taskstate[task].get('assignee') == actor.phid):
+            retval += "  Assigned to T" + task + "\n"
         if taskstate[task].get('assignee') == actor.phid:
-            retval += "    Assignee on T" + task + "\n"
+            if (taskstate[task].get('oldcolumn') !=
+                taskstate[task].get('column')):
+                retval += "  T" + task + ": "
+                retval += phidstore.name(taskstate[task]['column']) + "\n"
+            if (taskstate[task].get('oldstatus') !=
+                taskstate[task].get('status')):
+                retval += "  T" + task + ": "
+                retval += taskstate[task]['status'] + "\n"
     return retval
 
 
@@ -235,7 +271,8 @@ def main():
 
     taskstate = {}
     for task in transactions.keys():
-        taskstate[task] = process_transactions(transactions[task], start, end)
+        taskstate[task] = build_taskstate_from_transactions(
+                            transactions[task], start, end)
         for actorphid in taskstate[task]['actorset']:
             assert actorphid
             phidstore.get_user(actorphid).tasks.append(task)
