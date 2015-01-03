@@ -211,8 +211,8 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate):
             if ttime > start and ttime < end:
                 retval += "  "
                 retval += render_transaction(tact, phidstore) + "\n"
-        if taskstate[task].get('assignee') == actor:
-            retval += task['actorset'].add(task['assignee'])
+        if taskstate[task].get('assignee') == actor.phid:
+            retval += "    Assignee on T" + task + "\n"
     return retval
 
 
