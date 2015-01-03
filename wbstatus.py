@@ -16,6 +16,17 @@ MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
 WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
 WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 
+# TODO: read from config file
+global_config = {}
+global_config['workboard_state_phids'] = {}
+global_config['workboard_state_phids']['todo'] = "PHID-PCOL-7w2pgpuac4mxaqtjbso3"
+global_config['workboard_state_phids']['indev'] = "PHID-PCOL-hw5bskuzbvvef2zihx6r"
+global_config['workboard_state_phids']['feedback'] = "PHID-PCOL-nwvtvi6b6rq32opevo7o"
+global_config['workboard_state_phids']['archive'] = "PHID-PCOL-vdldqhpp2qukxikpf4zf"
+global_config['workboard_state_phids']['done'] = "PHID-PCOL-vhdu7nnvhs6c76axdswy"
+
+
+
 
 # Keep track of all of the objects with associated PHIDs.  Aggregate all of
 # PHIDs so that we only need to make one call to Phabricator.phid.query to
@@ -34,7 +45,10 @@ class PhidStore(object):
         self.query = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
 
     def name(self, phid):
-        return self.query[phid]['name']
+        try:
+            return self.query[phid]['name']
+        except KeyError:
+            return None
 
     def get_user(self, phid):
         retval = self.users.get(phid)
@@ -192,6 +206,72 @@ def build_taskstate_from_transactions(transactions, start, end):
     return taskstate
 
 
+def build_highlights_for_actor(transactions, taskstate, actor, start, end, config):
+    highlights = []
+    wbphids = config['workboard_state_phids']
+
+    def wbfinished(wbstate):
+        return (wbstate == wbphids['done'] or
+                wbstate == wbphids['archive'])
+
+    for task in actor.tasks:
+        for tact in transactions[task]:
+            ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
+            if ttime < start and ttime > end:
+                pass
+            if (tact['transactionType'] == 'reassign' and
+                actor.phid == tact['newValue'] and
+                actor.phid != tact['oldValue']):
+                if tact['authorPHID'] == actor.phid:
+                    highlights.append({'type': 'claim',
+                                       'task': task})
+                else:
+                    highlights.append({'type': 'receive',
+                                       'author': tact['authorPHID'],
+                                       'task': task})
+            elif (tact['transactionType'] == 'reassign' and
+                actor.phid == tact['oldValue'] and
+                actor.phid != tact['newValue']):
+                if tact['authorPHID'] == actor.phid:
+                    highlights.append({'type': 'give',
+                                       'recipient': tact['newValue'],
+                                       'task': task})
+                elif tact['authorPHID'] == tact['newValue']:
+                    highlights.append({'type': 'surrender',
+                                       'recipient': tact['newValue'],
+                                       'task': task})
+            elif (tact['transactionType'] == 'projectcolumn' and
+                tact['oldValue'] == wbphids['done'] and
+                tact['newValue'] == wbphids['archive']):
+                    #*yawn*
+                    pass
+            elif (tact['transactionType'] == 'projectcolumn' and
+                not wbfinished(tact['oldValue']) and
+                wbfinished(tact['newValue'])):
+                    highlights.append({'type': 'completed',
+                                       'task': task})
+                                 
+        if tact['transactionType'] == 'projectcolumn':
+            taskstate['column'] = tact['newValue']
+        elif tact['transactionType'] == 'status':
+            taskstate['status'] = tact['newValue']
+        elif tact['transactionType'] == 'reassign':
+            taskstate['assignee'] = tact['newValue']
+        if ttime > start and tact['authorPHID']:
+            taskstate['actorset'].add(tact['authorPHID'])
+    if taskstate.get('assignee'):
+        taskstate['actorset'].add(taskstate['assignee'])
+        if (taskstate[task].get('assignee') == actor.phid):
+            print "yay"
+    for tact in transactions:
+        if tact['authorPHID']:
+            taskstate['actorset'].add(tact['authorPHID'])
+        
+    if taskstate.get('assignee'):
+        taskstate['actorset'].add(taskstate['assignee'])
+    return ractions
+
+
 def render_transaction(tact, phidstore):
     time = dt.fromtimestamp(
         tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
@@ -225,7 +305,7 @@ def render_transaction(tact, phidstore):
     return retval
 
 
-def render_actor(actor, phidstore, transactions, start, end, taskstate):
+def render_actor(actor, phidstore, transactions, start, end, taskstate, config):
     retval = "Actor: " + actor.name + "\n"
     for task in actor.tasks:
         #retval += "  Task T{0}".format(task) + "\n"
@@ -244,6 +324,10 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate):
             if (taskstate[task].get('oldcolumn') !=
                 taskstate[task].get('column')):
                 retval += "  T" + task + ": "
+                if(taskstate[task]['oldcolumn']):
+                    retval += phidstore.name(taskstate[task]['oldcolumn']) + " -> "
+                else:
+                    retval += "(none) -> "
                 retval += phidstore.name(taskstate[task]['column']) + "\n"
             if (taskstate[task].get('oldstatus') !=
                 taskstate[task].get('status')):
@@ -262,6 +346,7 @@ def main():
     diff = get_workboard_diff(old_workboard, new_workboard)
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
     activity = get_activity_for_tasks(phab, cachedir, allkeys)
+    config = global_config
 
     transactions = {}
     phidstore = PhidStore()
@@ -279,7 +364,7 @@ def main():
 
     phidstore.load_from_phabricator(phab, cachedir)
     for phid, actor in phidstore.users.iteritems():
-        print render_actor(actor, phidstore, transactions, start, end, taskstate),
+        print render_actor(actor, phidstore, transactions, start, end, taskstate, config),
 
 if __name__ == "__main__":
     main()
