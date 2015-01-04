@@ -62,9 +62,6 @@ class TaskStore(object):
     def __init__(self, tasknums=set()):
         self.tasknums = tasknums
 
-    def update_tasknums(tasknums):
-        self.tasknums.update(tasknums)
-
     def load_from_phabricator(self, phab, cachedir):
         taskquerycall = lambda: phab.maniphest.query(ids=self.tasknums)
         self.query = call_phab_via_cache(
@@ -219,114 +216,9 @@ def build_taskstate_from_transactions(transactions, start, end):
     return taskstate
 
 
-def build_highlights_for_actor(transactions, taskstate, actor, start, end, config):
-    highlights = []
-    wbphids = config['workboard_state_phids']
-
-    def wbfinished(wbstate):
-        return (wbstate == wbphids['done'] or
-                wbstate == wbphids['archive'])
-
-    for task in actor.tasks:
-        for tact in transactions[task]:
-            ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
-            if ttime < start and ttime > end:
-                pass
-            if (tact['transactionType'] == 'reassign' and
-                actor.phid == tact['newValue'] and
-                actor.phid != tact['oldValue']):
-                if tact['authorPHID'] == actor.phid:
-                    highlights.append({'type': 'claim',
-                                       'task': task})
-                else:
-                    highlights.append({'type': 'receive',
-                                       'author': tact['authorPHID'],
-                                       'task': task})
-            elif (tact['transactionType'] == 'reassign' and
-                actor.phid == tact['oldValue'] and
-                actor.phid != tact['newValue']):
-                if tact['authorPHID'] == actor.phid:
-                    highlights.append({'type': 'give',
-                                       'recipient': tact['newValue'],
-                                       'task': task})
-                elif tact['authorPHID'] == tact['newValue']:
-                    highlights.append({'type': 'surrender',
-                                       'recipient': tact['newValue'],
-                                       'task': task})
-            elif (tact['transactionType'] == 'projectcolumn' and
-                tact['oldValue'] == wbphids['done'] and
-                tact['newValue'] == wbphids['archive']):
-                    #*yawn*
-                    pass
-            elif (tact['transactionType'] == 'projectcolumn' and
-                not wbfinished(tact['oldValue']) and
-                wbfinished(tact['newValue'])):
-                    highlights.append({'type': 'completed',
-                                       'task': task})
-                                 
-        if tact['transactionType'] == 'projectcolumn':
-            taskstate['column'] = tact['newValue']
-        elif tact['transactionType'] == 'status':
-            taskstate['status'] = tact['newValue']
-        elif tact['transactionType'] == 'reassign':
-            taskstate['assignee'] = tact['newValue']
-        if ttime > start and tact['authorPHID']:
-            taskstate['actorset'].add(tact['authorPHID'])
-    if taskstate.get('assignee'):
-        taskstate['actorset'].add(taskstate['assignee'])
-        if (taskstate[task].get('assignee') == actor.phid):
-            print "yay"
-    for tact in transactions:
-        if tact['authorPHID']:
-            taskstate['actorset'].add(tact['authorPHID'])
-        
-    if taskstate.get('assignee'):
-        taskstate['actorset'].add(taskstate['assignee'])
-    return ractions
-
-
-def render_transaction(tact, phidstore):
-    time = dt.fromtimestamp(
-        tact['timestamp']).strftime("%Y-%m-%d %H:%M UTC")
-    author = phidstore.name(tact['authorPHID'])
-    retval = ""
-    if tact['transactionType'] == 'projectcolumn':
-        if tact['oldValue']:
-            oldcolumn = phidstore.name(tact['oldValue'])
-        else:
-            oldcolumn = '(none)'
-        newcolumn = phidstore.name(tact['newValue'])
-        if oldcolumn != newcolumn:
-            retval = "  {0} {1} Column: '{2}' '{3}'".format(
-                time, author, oldcolumn, newcolumn)
-    elif tact['transactionType'] == 'status':
-        oldstatus = str(tact['oldValue'])
-        newstatus = tact['newValue']
-        retval = "  {0} {1} Status: '{2}' '{3}'".format(
-            time, author, oldstatus, newstatus)
-    elif tact['transactionType'] == 'reassign':
-        if tact['oldValue']:
-            oldassignee = phidstore.name(tact['oldValue'])
-        else:
-            oldassignee = '(unassigned)'
-        if tact['newValue']:
-            newassignee = phidstore.name(tact['newValue'])
-        else:
-            newassignee = '(unassigned)'
-        retval = "  {0} {1} Assignee: '{2}' '{3}'".format(
-            time, author, oldassignee, newassignee)
-    return retval
-
-
 def render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore):
     retval = "Actor: " + actor.name + "\n"
     for task in actor.tasks:
-        #retval += "  Task T{0}".format(task) + "\n"
-        #for tact in transactions[task]:
-            #ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
-            #if ttime > start and ttime < end:
-                #retval += "  "
-                #retval += render_transaction(tact, phidstore) + "\n"
         assignee = taskstate[task]['assignee']
         column = taskstate[task]['column']
         status = taskstate[task]['status']
