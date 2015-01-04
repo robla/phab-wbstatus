@@ -58,6 +58,22 @@ class PhidStore(object):
         return retval
 
 
+class TaskStore(object):
+    def __init__(self, tasknums=set()):
+        self.tasknums = tasknums
+
+    def update_tasknums(tasknums):
+        self.tasknums.update(tasknums)
+
+    def load_from_phabricator(self, phab, cachedir):
+        taskquerycall = lambda: phab.maniphest.query(ids=self.tasknums)
+        self.query = call_phab_via_cache(
+            cachedir, "taskquery", taskquerycall)
+        self.bytasknum = {}
+        for phid, task in self.query.iteritems():
+            self.bytasknum[task['id']] = task
+
+
 class User(object):
     def __init__(self, phid):
         assert phid
@@ -105,8 +121,7 @@ def get_workboard_diff(old_workboard, new_workboard):
     return diff
 
 
-def get_activity_for_tasks(phab, cachedir, tasks):
-    tasknums = [int(string.lstrip(x, "T")) for x in tasks]
+def get_activity_for_tasks(phab, cachedir, tasknums):
     activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
     activity = call_phab_via_cache(
         cachedir, "gettasktransactions", activityquery)
@@ -303,7 +318,7 @@ def render_transaction(tact, phidstore):
     return retval
 
 
-def render_actor(actor, phidstore, transactions, start, end, taskstate, config):
+def render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore):
     retval = "Actor: " + actor.name + "\n"
     for task in actor.tasks:
         #retval += "  Task T{0}".format(task) + "\n"
@@ -315,20 +330,23 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config):
         assignee = taskstate[task]['assignee']
         column = taskstate[task]['column']
         status = taskstate[task]['status']
+        title = taskstore.bytasknum[task]['title']
+        retval += "  T" + task + ": " + title + "\n"
+            
         if (assignee.get('start') == actor.phid and 
             assignee.get('end') != actor.phid):
-            retval += "  Unassigned from T" + task + "\n"
+            retval += "    Unassigned\n"
         if (assignee.get('start') != actor.phid and
             assignee.get('end') == actor.phid):
-            retval += "  Assigned to T" + task + "\n"
+            retval += "    Assigned\n"
         if assignee.get('end') == actor.phid:
             if (column.get('start') != column.get('end')):
-                retval += "  T" + task + ": "
+                retval += "    "
                 if(column.get('start')):
                     retval += phidstore.name(column['start']) + " -> "
                 retval += phidstore.name(column['end']) + "\n"
             if (status['start'] != status['end']):
-                retval += "  T" + task + ": "
+                retval += "    "
                 if(column['start']):
                     retval += status['start'] + " -> "
                 retval += status['end'] + "\n"
@@ -344,11 +362,13 @@ def main():
     new_workboard = parse_workboard_html(end)
     diff = get_workboard_diff(old_workboard, new_workboard)
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
-    activity = get_activity_for_tasks(phab, cachedir, allkeys)
+    alltasknums = [int(string.lstrip(x, "T")) for x in allkeys]
+    activity = get_activity_for_tasks(phab, cachedir, alltasknums)
     config = global_config
 
     transactions = {}
     phidstore = PhidStore()
+    taskstore = TaskStore(alltasknums)
     for tasknum, taskfeed in activity.iteritems():
         tacts = get_filtered_transactions_for_task(taskfeed, phidstore)
         transactions[tasknum] = tacts
@@ -362,8 +382,9 @@ def main():
             phidstore.get_user(actorphid).tasks.append(task)
 
     phidstore.load_from_phabricator(phab, cachedir)
+    taskstore.load_from_phabricator(phab, cachedir)
     for phid, actor in phidstore.users.iteritems():
-        print render_actor(actor, phidstore, transactions, start, end, taskstate, config),
+        print render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore),
 
 if __name__ == "__main__":
     main()
