@@ -177,12 +177,13 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
     return transactions
 
 
-def build_taskstate_from_transactions(transactions, start, end):
+def build_taskstate_from_transactions(transactions, start, end, config):
     taskstate = {'column': {},
                  'status': {},
                  'assignee': {},
                  'title': {}}
     taskstate['actorset'] = set()
+    wbstate = config['workboard_state_phids']
     for tact in transactions:
         ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
         if ttime > end:
@@ -211,6 +212,14 @@ def build_taskstate_from_transactions(transactions, start, end):
             taskstate[tmap[ttype]]['end'] = tact['newValue']
         if ttime > start and tact['authorPHID']:
             taskstate['actorset'].add(tact['authorPHID'])
+        if (tact['transactionType'] == 'projectcolumn' and
+            tact['oldValue'] != wbstate['feedback'] and
+            tact['newValue'] == wbstate['feedback']):
+            taskstate['waitingsince'] = ttime
+        if (tact['transactionType'] == 'projectcolumn' and
+            tact['oldValue'] != wbstate['indev'] and
+            tact['newValue'] == wbstate['indev']):
+            taskstate['workingsince'] = ttime
     if taskstate.get('assignee') and taskstate['assignee']['end']:
         taskstate['actorset'].add(taskstate['assignee']['end'])
     return taskstate
@@ -237,7 +246,8 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
             if (column.get('start') == wbstate['done'] and
                 column.get('end') == wbstate['archive']):
                 pass
-            elif (column.get('start') != column.get('end')):
+            elif (column.get('start') != column.get('end') and 
+                  column.get('end') != wbstate['feedback']):
                 taskval = "    "
                 if newitem:
                     taskval += "Assigned and "
@@ -265,7 +275,16 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
                 taskarray.append("    Assigned\n")
         if (column.get('start')  == wbstate['indev'] == column['end'] and
             assignee.get('end') == actor.phid):
-            taskarray.append("    Still working on it\n")
+            taskval = "    Still working on it (since "
+            taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
+            taskval += ")\n"
+            taskarray.append(taskval)
+        if (wbstate['feedback'] == column.get('end') and
+            assignee.get('end') == actor.phid):
+            taskval = "    Waiting for feedback since "
+            taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
+            taskval += "\n"
+            taskarray.append(taskval)
         if taskarray:
             retval += "  T" + task + ": " + title + "\n"
             for line in taskarray:
@@ -298,7 +317,7 @@ def main():
     taskstate = {}
     for task in transactions.keys():
         taskstate[task] = build_taskstate_from_transactions(
-                            transactions[task], start, end)
+                            transactions[task], start, end, config)
         for actorphid in taskstate[task]['actorset']:
             assert actorphid
             phidstore.get_user(actorphid).tasks.append(task)
