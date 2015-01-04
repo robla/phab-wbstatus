@@ -223,25 +223,33 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
         column = taskstate[task]['column']
         status = taskstate[task]['status']
         title = taskstore.bytasknum[task]['title']
-        retval += "  T" + task + ": " + title + "\n"
-            
+
+        taskarray = []
         if (assignee.get('start') == actor.phid and 
             assignee.get('end') != actor.phid):
-            retval += "    Unassigned\n"
-        if (assignee.get('start') != actor.phid and
+            taskarray.append("    Unassigned\n")
+        elif (assignee.get('start') != actor.phid and
             assignee.get('end') == actor.phid):
-            retval += "    Assigned\n"
+            taskarray.append("    Assigned\n")
         if assignee.get('end') == actor.phid:
             if (column.get('start') != column.get('end')):
-                retval += "    "
+                taskval = "    "
                 if(column.get('start')):
-                    retval += phidstore.name(column['start']) + " -> "
-                retval += phidstore.name(column['end']) + "\n"
+                    taskval += phidstore.name(column['start']) + " -> "
+                taskval += phidstore.name(column['end']) + "\n"
+                taskarray.append(taskval)
             if (status['start'] != status['end']):
-                retval += "    "
+                taskval = "    "
                 if(column['start']):
-                    retval += status['start'] + " -> "
-                retval += status['end'] + "\n"
+                    taskval += status['start'] + " -> "
+                taskval += status['end'] + "\n"
+                taskarray.append(taskval)
+        if taskarray:
+            retval += "  T" + task + ": " + title + "\n"
+            for line in taskarray:
+                retval += line
+
+
     return retval
 
 
