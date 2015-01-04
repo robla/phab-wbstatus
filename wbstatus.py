@@ -60,6 +60,7 @@ class PhidStore(object):
 
 class User(object):
     def __init__(self, phid):
+        assert phid
         self.phid = phid
         self.tasks = []
         self.phidstore = None
@@ -136,7 +137,8 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
         item['timestamp'] = int(tact['dateCreated'])
         item['authorPHID'] = tact['authorPHID']
         phidstore.add(item['authorPHID'])
-        if (tact["transactionType"] == "status"):
+        if (tact["transactionType"] == "status" or
+            tact["transactionType"] == "title"):
             item['oldValue'] = tact['oldValue']
             item['newValue'] = tact['newValue']
         elif (tact["transactionType"] == "reassign"):
@@ -164,7 +166,10 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
 
 
 def build_taskstate_from_transactions(transactions, start, end):
-    taskstate = {}
+    taskstate = {'column': {},
+                 'status': {},
+                 'assignee': {},
+                 'title': {}}
     taskstate['actorset'] = set()
     for tact in transactions:
         ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
@@ -180,29 +185,22 @@ def build_taskstate_from_transactions(transactions, start, end):
         # d->e
         # ---END
         # Old should be "c" and new should be "e"
-        # TODO: make a unit test out of this
-        if tact['transactionType'] == 'projectcolumn':
-            if ttime >= start and not taskstate.get('column'):
-                taskstate['oldcolumn'] = tact['oldValue']
+        # TODO: make a series of unit tests out of this
+        tmap = {'projectcolumn': 'column',
+                'status': 'status',
+                'reassign': 'assignee',
+                'title': 'title'}
+        ttype = tact['transactionType']
+        if tact['transactionType'] in tmap:
+            if ttime >= start and not taskstate.get(tmap[ttype]):
+                taskstate[tmap[ttype]]['start'] = tact['oldValue']
             elif ttime < start:
-                taskstate['oldcolumn'] = tact['newValue']
-            taskstate['column'] = tact['newValue']
-        elif tact['transactionType'] == 'status':
-            if ttime >= start and not taskstate.get('status'):
-                taskstate['oldstatus'] = tact['oldValue']
-            elif ttime < start:
-                taskstate['oldstatus'] = tact['newValue']
-            taskstate['status'] = tact['newValue']
-        elif tact['transactionType'] == 'reassign':
-            if ttime >= start and not taskstate.get('assignee'):
-                taskstate['oldassignee'] = tact['oldValue']
-            elif ttime < start:
-                taskstate['oldassignee'] = tact['newValue']
-            taskstate['assignee'] = tact['newValue']
+                taskstate[tmap[ttype]]['start'] = tact['newValue']
+            taskstate[tmap[ttype]]['end'] = tact['newValue']
         if ttime > start and tact['authorPHID']:
             taskstate['actorset'].add(tact['authorPHID'])
-    if taskstate.get('assignee'):
-        taskstate['actorset'].add(taskstate['assignee'])
+    if taskstate.get('assignee') and taskstate['assignee']['end']:
+        taskstate['actorset'].add(taskstate['assignee']['end'])
     return taskstate
 
 
@@ -314,25 +312,26 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config):
             #if ttime > start and ttime < end:
                 #retval += "  "
                 #retval += render_transaction(tact, phidstore) + "\n"
-        if (taskstate[task].get('oldassignee') == actor.phid and
-            taskstate[task].get('assignee') != actor.phid):
+        assignee = taskstate[task]['assignee']
+        column = taskstate[task]['column']
+        status = taskstate[task]['status']
+        if (assignee.get('start') == actor.phid and 
+            assignee.get('end') != actor.phid):
             retval += "  Unassigned from T" + task + "\n"
-        if (taskstate[task].get('oldassignee') != actor.phid and
-            taskstate[task].get('assignee') == actor.phid):
+        if (assignee.get('start') != actor.phid and
+            assignee.get('end') == actor.phid):
             retval += "  Assigned to T" + task + "\n"
-        if taskstate[task].get('assignee') == actor.phid:
-            if (taskstate[task].get('oldcolumn') !=
-                taskstate[task].get('column')):
+        if assignee.get('end') == actor.phid:
+            if (column.get('start') != column.get('end')):
                 retval += "  T" + task + ": "
-                if(taskstate[task]['oldcolumn']):
-                    retval += phidstore.name(taskstate[task]['oldcolumn']) + " -> "
-                else:
-                    retval += "(none) -> "
-                retval += phidstore.name(taskstate[task]['column']) + "\n"
-            if (taskstate[task].get('oldstatus') !=
-                taskstate[task].get('status')):
+                if(column.get('start')):
+                    retval += phidstore.name(column['start']) + " -> "
+                retval += phidstore.name(column['end']) + "\n"
+            if (status['start'] != status['end']):
                 retval += "  T" + task + ": "
-                retval += taskstate[task]['status'] + "\n"
+                if(column['start']):
+                    retval += status['start'] + " -> "
+                retval += status['end'] + "\n"
     return retval
 
 
