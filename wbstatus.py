@@ -217,7 +217,9 @@ def build_taskstate_from_transactions(transactions, start, end):
 
 
 def render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore):
-    retval = "Actor: " + actor.name + "\n"
+    wbstate = config['workboard_state_phids']
+    retval = "=====================\n"
+    retval += "Actor: " + actor.name + "\n"
     for task in actor.tasks:
         assignee = taskstate[task]['assignee']
         column = taskstate[task]['column']
@@ -228,22 +230,42 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
         if (assignee.get('start') == actor.phid and 
             assignee.get('end') != actor.phid):
             taskarray.append("    Unassigned\n")
-        elif (assignee.get('start') != actor.phid and
-            assignee.get('end') == actor.phid):
-            taskarray.append("    Assigned\n")
         if assignee.get('end') == actor.phid:
-            if (column.get('start') != column.get('end')):
+            newitem = (assignee.get('start') != actor.phid and
+                       assignee.get('end') == actor.phid)
+ 
+            if (column.get('start') == wbstate['done'] and
+                column.get('end') == wbstate['archive']):
+                pass
+            elif (column.get('start') != column.get('end')):
                 taskval = "    "
-                if(column.get('start')):
-                    taskval += phidstore.name(column['start']) + " -> "
-                taskval += phidstore.name(column['end']) + "\n"
+                if newitem:
+                    taskval += "Assigned and "
+                if((column.get('start') == wbstate['todo'] or 
+                    not column.get('start')) and
+                   column['end'] == wbstate['indev']):
+                    taskval += "Started\n"
+                elif(column['end'] == wbstate['done'] or
+                     column['end'] == wbstate['archive']):
+                    taskval += "Completed\n"
+                else:
+                    if(column.get('start')):
+                        taskval += phidstore.name(column['start']) + " -> "
+                    taskval += phidstore.name(column['end']) + "\n"
                 taskarray.append(taskval)
-            if (status['start'] != status['end']):
+            elif (status['start'] != status['end']):
                 taskval = "    "
+                if newitem:
+                    taskval += "Assigned and "
                 if(column['start']):
                     taskval += status['start'] + " -> "
                 taskval += status['end'] + "\n"
                 taskarray.append(taskval)
+            elif newitem:
+                taskarray.append("    Assigned\n")
+        if (column.get('start')  == wbstate['indev'] == column['end'] and
+            assignee.get('end') == actor.phid):
+            taskarray.append("    Still working on it\n")
         if taskarray:
             retval += "  T" + task + ": " + title + "\n"
             for line in taskarray:
