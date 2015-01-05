@@ -273,16 +273,18 @@ def build_taskstate_from_transactions(transactions, start, end, config):
     return taskstate
 
 
-# Return a text blob for a given user ("actor"), performing the many
+# Return an HTML blob for a given user ("actor"), performing the many
 # contortions necessary to have something read more-or-less like plain
 # English.  The goal of this software is to present a simple view of
 # things, so precision is compromised in the name of clarity and
 # highlighting what's important.
+# TODO: switch to bottle.SimpleTemplate or some other HTML template
+# solution
 def render_actor(actor, phidstore, transactions, start, end, taskstate,
                  config, taskstore):
     wbstate = config['workboard_state_phids']
-    retval = "=====================\n"
-    retval += "Actor: " + actor.name + "\n"
+    retval = "<li>" + actor.name + "\n"
+    retval += "<ul>\n"
     for task in actor.tasks:
         assignee = taskstate[task]['assignee']
         column = taskstate[task]['column']
@@ -295,7 +297,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
         taskarray = []
         if (assignee.get('start') == actor.phid and
                 assignee.get('end') != actor.phid):
-            taskarray.append("    Unassigned\n")
+            taskarray.append("    <li>Unassigned</li>\n")
         if assignee.get('end') == actor.phid:
             newitem = (assignee.get('start') != actor.phid and
                        assignee.get('end') == actor.phid)
@@ -310,16 +312,16 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
             # handled.
             elif (column.get('start') != column.get('end') and
                   column.get('end') != wbstate['feedback']):
-                taskval = "    "
+                taskval = "    <li>"
                 if newitem:
                     taskval += "Assigned and "
                 if((column.get('start') == wbstate['todo'] or
                     not column.get('start')) and
                    column['end'] == wbstate['indev']):
-                    taskval += "Started\n"
+                    taskval += "Started</li>\n"
                 elif(column['end'] == wbstate['done'] or
                      column['end'] == wbstate['archive']):
-                    taskval += "Completed\n"
+                    taskval += "Completed</li>\n"
                 # Catchall in case one of the cases above doesn't do it.
                 else:
                     if(column.get('start')):
@@ -327,34 +329,41 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                     taskval += phidstore.name(column['end']) + "\n"
                 taskarray.append(taskval)
             elif (status['start'] != status['end']):
-                taskval = "    "
+                taskval = "    <li>"
                 if newitem:
                     taskval += "Assigned and "
                 if(column['start']):
                     taskval += status['start'] + " -> "
-                taskval += status['end'] + "\n"
+                taskval += status['end'] + "</li>\n"
                 taskarray.append(taskval)
             elif newitem:
-                taskarray.append("    Assigned\n")
+                taskarray.append("    <li>Assigned</li>\n")
         if (column.get('start') == wbstate['indev'] == column['end'] and
                 assignee.get('end') == actor.phid):
-            taskval = "    Still working on it (since "
+            taskval = "    <li>Still working on it (since "
             taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
-            taskval += ")\n"
+            taskval += ")</li>\n"
             taskarray.append(taskval)
         if (wbstate['feedback'] == column.get('end') and
                 assignee.get('end') == actor.phid):
-            taskval = "    Waiting for feedback since "
+            taskval = "    <li>Waiting for feedback since "
             taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
-            taskval += "\n"
+            taskval += "</li>\n"
             taskarray.append(taskval)
         # Now print out all of the activity for the task, or skip if
         # there hasn't been anything interesting to report.
         if taskarray:
-            retval += "  T" + task + ": " + title + "\n"
+            retval += "  <li>"
+            retval += "<a href='https://phabricator.wikimedia.org/T" + \
+                task + "'>"
+            retval += "T" + task
+            retval += "</a>: <small>" + title + "</small>\n"
+            retval += "  <ul>\n"
             for line in taskarray:
                 retval += line
-
+            retval += "  </ul>\n"
+            retval += "  </li>\n"
+    retval += "</ul></li>\n"
     return retval
 
 
@@ -424,10 +433,18 @@ def main():
     taskstore = TaskStore(alltasknums)
     taskstore.load_from_phabricator(phab, config['cachedir'])
 
+    print """
+<html><body>
+<ul>
+"""
     # Spit out a text blob for each of the users.
     for phid, actor in phidstore.users.iteritems():
         print render_actor(actor, phidstore, transactions, start, end,
                            taskstate, config, taskstore),
+    print """
+</ul>
+</body></html>
+"""
 
 if __name__ == "__main__":
     main()
