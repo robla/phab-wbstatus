@@ -8,27 +8,54 @@ import dateutil.parser
 import os
 import string
 import pickle
+import argparse
 
 from datetime import datetime as dt
 from dateutil import tz
 
-MWCORETEAM_PHID = "PHID-PROJ-oft3zinwvih7bgdhpfgj"
-WORKBOARD_HTML_CACHE = '/home/robla/2014/phabworkboard-data/html'
-WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 
-# TODO: read from config file
-global_config = {}
-global_config['workboard_state_phids'] = {}
-global_config['workboard_state_phids'][
-    'todo'] = "PHID-PCOL-7w2pgpuac4mxaqtjbso3"
-global_config['workboard_state_phids'][
-    'indev'] = "PHID-PCOL-hw5bskuzbvvef2zihx6r"
-global_config['workboard_state_phids'][
-    'feedback'] = "PHID-PCOL-nwvtvi6b6rq32opevo7o"
-global_config['workboard_state_phids'][
-    'archive'] = "PHID-PCOL-vdldqhpp2qukxikpf4zf"
-global_config['workboard_state_phids'][
-    'done'] = "PHID-PCOL-vhdu7nnvhs6c76axdswy"
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description='Generate a summary ' +
+        'of Phabricator workboard activity for a given time period')
+    parser.add_argument('--use-buggy-cache',
+                        help='Overly aggressive cache that should ' +
+                        'only be used for development purposes',
+                        action='store_true')
+    parser.add_argument('--start', help='Start of the interval for ' +
+                        'the generated summary.  Default: 24 hours ' +
+                        'before --end.')
+    parser.add_argument('--end', help='End of the interval for ' +
+                        'the generated summary.  Default: midnight at' +
+                        ' start of today.')
+    parser.add_argument('--config', help='Location of the config ' +
+                        'file.', default='wbstatus-config.json')
+    return parser.parse_args()
+
+
+# Read command line options and merge with whatever config file exists
+# to create a config object we can lob around.
+def get_config():
+    args = parse_arguments()
+
+    with open(args.config) as fh:
+        config = json.load(fh)
+
+    if args.end:
+        config['end'] = dateutil.parser.parse(args.end)
+    else:
+        now = datetime.datetime.utcnow()
+        config['end'] = datetime.datetime(now.year, now.month, now.day,
+                                          0, 0, 0, tzinfo=dateutil.tz.tzutc())
+
+    if args.start:
+        config['start'] = dateutil.parser.parse(args.start)
+    else:
+        config['start'] = config['end'] - datetime.timedelta(days=1)
+
+    config['usecache'] = args.use_buggy_cache
+
+    return config
 
 
 # Keep track of all of the objects with associated PHIDs.  Aggregate all of
@@ -93,18 +120,17 @@ class User(object):
     def name(self):
         return self.phidstore.name(self.phid)
 
+
 # Scrape the HTML for a Phabricator workboard, and return a simple dict
 # that represents the workboard.  The HTML is pre-retrieved via cron job
 # that snarfs the HTML as much as hourly.  This function accesses the
 # cache via timestamp, which is rounded to the nearest hour in the file
 # name.
-
-
-def parse_workboard_html(wbtime):
+def parse_workboard_html(wbtime, wbhtmlcache):
     # File name will look something like workboard-2014-12-22T00.html,
     # which corresponds to midnight on 2014-12-22
     filename = 'workboard-{:%Y-%m-%dT%H%Z}.html'.format(wbtime)
-    htmlhandle = open(os.path.join(WORKBOARD_HTML_CACHE, filename))
+    htmlhandle = open(os.path.join(wbhtmlcache, filename))
     soup = BeautifulSoup(htmlhandle)
     columns = soup.find_all(class_="phui-workpanel-view")
     retval = {}
@@ -130,10 +156,9 @@ def get_workboard_diff(old_workboard, new_workboard):
             diff[key] = (oldvalue, newvalue)
     return diff
 
+
 # Pretty much the minimal wrapper around maniphest.gettasktransactions
 # to use the cache.
-
-
 def get_activity_for_tasks(phab, cachedir, tasknums):
     activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
     activity = call_phab_via_cache(
@@ -160,7 +185,7 @@ def call_phab_via_cache(cachedir, key, apicall):
 # There's a fair amount of logic here for making the return value a bit
 # more uniform than what is passed in.
 # TODO: pass in MWCORETEAM_PHID instead of relying on global constant.
-def get_filtered_transactions_for_task(taskfeed, phidstore):
+def get_filtered_transactions_for_task(taskfeed, phidstore, teamphid):
     transactions = []
     for tact in taskfeed:
         item = {}
@@ -180,7 +205,7 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
             if tact['newValue']:
                 phidstore.add(item['newValue'])
         elif (tact["transactionType"] == "projectcolumn" and
-                tact["oldValue"]["projectPHID"] == MWCORETEAM_PHID):
+                tact["oldValue"]["projectPHID"] == teamphid):
             oldvalphids = tact['oldValue']['columnPHIDs']
             if isinstance(oldvalphids, dict):
                 item['oldValue'] = oldvalphids.values()[0]
@@ -195,12 +220,11 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
             transactions.append(item)
     return transactions
 
+
 # Walk through the transactions and build up the state for a particular
 # task at each end of the interval defined by "start" and "end".
 # Also keep track of how long tasks have been in the "In Dev" and
 # "Waiting for Review/Feedback" columns.
-
-
 def build_taskstate_from_transactions(transactions, start, end, config):
     taskstate = {'column': {},
                  'status': {},
@@ -248,13 +272,12 @@ def build_taskstate_from_transactions(transactions, start, end, config):
         taskstate['actorset'].add(taskstate['assignee']['end'])
     return taskstate
 
+
 # Return a text blob for a given user ("actor"), performing the many
 # contortions necessary to have something read more-or-less like plain
 # English.  The goal of this software is to present a simple view of
 # things, so precision is compromised in the name of clarity and
 # highlighting what's important.
-
-
 def render_actor(actor, phidstore, transactions, start, end, taskstate,
                  config, taskstore):
     wbstate = config['workboard_state_phids']
@@ -336,12 +359,11 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
 
 
 def main():
-    # configuration fun.  TODO: stop hardcoding this - use command line
-    # and config files.
-    cachedir = WORKBOARD_PICKLE_CACHE
-    config = global_config
-    start = dateutil.parser.parse("2014-12-22T0:00PST")
-    end = dateutil.parser.parse("2014-12-23T0:00PST")
+    # Parse arguments and read config file plus various and sundry
+    # other bits.
+    config = get_config()
+    start = config['start']
+    end = config['end']
 
     # Scrape workboards from HTML (yes, "ewwww....").  At first, I
     # thought this was the only viable strategy, since most Phabricator
@@ -354,17 +376,18 @@ def main():
     # approach still presents is it provides a fairly narrowly scoped
     # list of issues (only those that are/were just visible on the
     # workboard; skipping long-since archived issues).
-    old_workboard = parse_workboard_html(start)
-    new_workboard = parse_workboard_html(end)
+    old_workboard = parse_workboard_html(start, config['htmlcachedir'])
+    new_workboard = parse_workboard_html(end, config['htmlcachedir'])
     # I think this can be deleted, since the diff isn't used anymore.
-    diff = get_workboard_diff(old_workboard, new_workboard)
+    # diff = get_workboard_diff(old_workboard, new_workboard)
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
     alltasknums = [int(string.lstrip(x, "T")) for x in allkeys]
 
     # Use the Phabricator API to fetch all of the activity for the list
     # of issues passed via "alltasknums".
     phab = phabricator.Phabricator()
-    activity = get_activity_for_tasks(phab, cachedir, alltasknums)
+    activity = get_activity_for_tasks(phab, config['cachedir'],
+                                      alltasknums)
 
     # Build a sane view of the transactions, filtering out a lot of
     # noise and making the result a little more uniform and sane.
@@ -375,7 +398,8 @@ def main():
     transactions = {}
     phidstore = PhidStore()
     for tasknum, taskfeed in activity.iteritems():
-        tacts = get_filtered_transactions_for_task(taskfeed, phidstore)
+        tacts = get_filtered_transactions_for_task(taskfeed, phidstore,
+                                                   config['teamphid'])
         transactions[tasknum] = tacts
 
     # Walk through the transactions and build up the state for each
@@ -393,12 +417,12 @@ def main():
 
     # Look up what all of the PHIDs are, and squirrel away the resulting
     # metadata.
-    phidstore.load_from_phabricator(phab, cachedir)
+    phidstore.load_from_phabricator(phab, config['cachedir'])
 
     # The TaskStore is a wrapper around the Phabricator manifest.query
     # API call, indexing the result by task number.
     taskstore = TaskStore(alltasknums)
-    taskstore.load_from_phabricator(phab, cachedir)
+    taskstore.load_from_phabricator(phab, config['cachedir'])
 
     # Spit out a text blob for each of the users.
     for phid, actor in phidstore.users.iteritems():
