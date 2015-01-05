@@ -19,13 +19,16 @@ WORKBOARD_PICKLE_CACHE = '/home/robla/2014/phabworkboard-data/pickles'
 # TODO: read from config file
 global_config = {}
 global_config['workboard_state_phids'] = {}
-global_config['workboard_state_phids']['todo'] = "PHID-PCOL-7w2pgpuac4mxaqtjbso3"
-global_config['workboard_state_phids']['indev'] = "PHID-PCOL-hw5bskuzbvvef2zihx6r"
-global_config['workboard_state_phids']['feedback'] = "PHID-PCOL-nwvtvi6b6rq32opevo7o"
-global_config['workboard_state_phids']['archive'] = "PHID-PCOL-vdldqhpp2qukxikpf4zf"
-global_config['workboard_state_phids']['done'] = "PHID-PCOL-vhdu7nnvhs6c76axdswy"
-
-
+global_config['workboard_state_phids'][
+    'todo'] = "PHID-PCOL-7w2pgpuac4mxaqtjbso3"
+global_config['workboard_state_phids'][
+    'indev'] = "PHID-PCOL-hw5bskuzbvvef2zihx6r"
+global_config['workboard_state_phids'][
+    'feedback'] = "PHID-PCOL-nwvtvi6b6rq32opevo7o"
+global_config['workboard_state_phids'][
+    'archive'] = "PHID-PCOL-vdldqhpp2qukxikpf4zf"
+global_config['workboard_state_phids'][
+    'done'] = "PHID-PCOL-vhdu7nnvhs6c76axdswy"
 
 
 # Keep track of all of the objects with associated PHIDs.  Aggregate all of
@@ -33,6 +36,7 @@ global_config['workboard_state_phids']['done'] = "PHID-PCOL-vhdu7nnvhs6c76axdswy
 # lookup a big batch of PHIDs, rather than making dozens/hundreds of calls to
 # look them up one at a time.
 class PhidStore(object):
+
     def __init__(self):
         self.phids = set()
         self.users = {}
@@ -60,10 +64,11 @@ class PhidStore(object):
 
 # the TaskStore is a wrapper around the Phabricator manifest.query
 # API call, so this object indexes the result by task number.  This
-# is necessary because the Phabricator API inexplicably doesn't 
-# return the result in such a way that the tasks can be easily 
+# is necessary because the Phabricator API inexplicably doesn't
+# return the result in such a way that the tasks can be easily
 # looked up by task number.
 class TaskStore(object):
+
     def __init__(self, tasknums=set()):
         self.tasknums = tasknums
 
@@ -77,6 +82,7 @@ class TaskStore(object):
 
 
 class User(object):
+
     def __init__(self, phid):
         assert phid
         self.phid = phid
@@ -92,6 +98,8 @@ class User(object):
 # that snarfs the HTML as much as hourly.  This function accesses the
 # cache via timestamp, which is rounded to the nearest hour in the file
 # name.
+
+
 def parse_workboard_html(wbtime):
     # File name will look something like workboard-2014-12-22T00.html,
     # which corresponds to midnight on 2014-12-22
@@ -124,6 +132,8 @@ def get_workboard_diff(old_workboard, new_workboard):
 
 # Pretty much the minimal wrapper around maniphest.gettasktransactions
 # to use the cache.
+
+
 def get_activity_for_tasks(phab, cachedir, tasknums):
     activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
     activity = call_phab_via_cache(
@@ -149,7 +159,7 @@ def call_phab_via_cache(cachedir, key, apicall):
 # Also populate the PHIDs that will eventually need to be resolved.
 # There's a fair amount of logic here for making the return value a bit
 # more uniform than what is passed in.
-# TODO: pass in MWCORETEAM_PHID instead of relying on global constant. 
+# TODO: pass in MWCORETEAM_PHID instead of relying on global constant.
 def get_filtered_transactions_for_task(taskfeed, phidstore):
     transactions = []
     for tact in taskfeed:
@@ -159,7 +169,7 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
         item['authorPHID'] = tact['authorPHID']
         phidstore.add(item['authorPHID'])
         if (tact["transactionType"] == "status" or
-            tact["transactionType"] == "title"):
+                tact["transactionType"] == "title"):
             item['oldValue'] = tact['oldValue']
             item['newValue'] = tact['newValue']
         elif (tact["transactionType"] == "reassign"):
@@ -188,7 +198,9 @@ def get_filtered_transactions_for_task(taskfeed, phidstore):
 # Walk through the transactions and build up the state for a particular
 # task at each end of the interval defined by "start" and "end".
 # Also keep track of how long tasks have been in the "In Dev" and
-# "Waiting for Review/Feedback" columns.    
+# "Waiting for Review/Feedback" columns.
+
+
 def build_taskstate_from_transactions(transactions, start, end, config):
     taskstate = {'column': {},
                  'status': {},
@@ -200,7 +212,7 @@ def build_taskstate_from_transactions(transactions, start, end, config):
         ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
         if ttime > end:
             break
-        # For each type, build the "old" and "new" state along the 
+        # For each type, build the "old" and "new" state along the
         # interval defined by the start and end variables
         # For example:
         # a->b
@@ -226,11 +238,11 @@ def build_taskstate_from_transactions(transactions, start, end, config):
             taskstate['actorset'].add(tact['authorPHID'])
         if (tact['transactionType'] == 'projectcolumn' and
             tact['oldValue'] != wbstate['feedback'] and
-            tact['newValue'] == wbstate['feedback']):
+                tact['newValue'] == wbstate['feedback']):
             taskstate['waitingsince'] = ttime
         if (tact['transactionType'] == 'projectcolumn' and
             tact['oldValue'] != wbstate['indev'] and
-            tact['newValue'] == wbstate['indev']):
+                tact['newValue'] == wbstate['indev']):
             taskstate['workingsince'] = ttime
     if taskstate.get('assignee') and taskstate['assignee']['end']:
         taskstate['actorset'].add(taskstate['assignee']['end'])
@@ -241,7 +253,10 @@ def build_taskstate_from_transactions(transactions, start, end, config):
 # English.  The goal of this software is to present a simple view of
 # things, so precision is compromised in the name of clarity and
 # highlighting what's important.
-def render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore):
+
+
+def render_actor(actor, phidstore, transactions, start, end, taskstate,
+                 config, taskstore):
     wbstate = config['workboard_state_phids']
     retval = "=====================\n"
     retval += "Actor: " + actor.name + "\n"
@@ -252,11 +267,11 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
         title = taskstore.bytasknum[task]['title']
 
         # Stuff the things to be printed into an array.  If the array
-        # is empty at the end of all of this, then we forego printing 
+        # is empty at the end of all of this, then we forego printing
         # the task number and title.
         taskarray = []
-        if (assignee.get('start') == actor.phid and 
-            assignee.get('end') != actor.phid):
+        if (assignee.get('start') == actor.phid and
+                assignee.get('end') != actor.phid):
             taskarray.append("    Unassigned\n")
         if assignee.get('end') == actor.phid:
             newitem = (assignee.get('start') != actor.phid and
@@ -264,18 +279,18 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
             # the move from "done" to "archive" isn't very interesting
             # so ignore it.
             if (column.get('start') == wbstate['done'] and
-                column.get('end') == wbstate['archive']):
+                    column.get('end') == wbstate['archive']):
                 pass
             # We have a change, so there's likely something interesting
             # to report
             # TODO: handle "feedback" state the same way that "indev" is
             # handled.
-            elif (column.get('start') != column.get('end') and 
+            elif (column.get('start') != column.get('end') and
                   column.get('end') != wbstate['feedback']):
                 taskval = "    "
                 if newitem:
                     taskval += "Assigned and "
-                if((column.get('start') == wbstate['todo'] or 
+                if((column.get('start') == wbstate['todo'] or
                     not column.get('start')) and
                    column['end'] == wbstate['indev']):
                     taskval += "Started\n"
@@ -299,13 +314,13 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
             elif newitem:
                 taskarray.append("    Assigned\n")
         if (column.get('start') == wbstate['indev'] == column['end'] and
-            assignee.get('end') == actor.phid):
+                assignee.get('end') == actor.phid):
             taskval = "    Still working on it (since "
             taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
             taskval += ")\n"
             taskarray.append(taskval)
         if (wbstate['feedback'] == column.get('end') and
-            assignee.get('end') == actor.phid):
+                assignee.get('end') == actor.phid):
             taskval = "    Waiting for feedback since "
             taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
             taskval += "\n"
@@ -316,7 +331,6 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate, config, 
             retval += "  T" + task + ": " + title + "\n"
             for line in taskarray:
                 retval += line
-
 
     return retval
 
@@ -334,8 +348,8 @@ def main():
     # APIs don't return workboard state at all.  I discovered that I
     # could reconstruct all of the state I needed walking through the
     # transactions in a task (also, "ew", but not "ewwww.....").
-    # It might be possible to eliminate scraping altogether, but one 
-    # would still need to keep track of which tasks got moved out of 
+    # It might be possible to eliminate scraping altogether, but one
+    # would still need to keep track of which tasks got moved out of
     # the team project, which I haven't gotten to.  The advantage this
     # approach still presents is it provides a fairly narrowly scoped
     # list of issues (only those that are/were just visible on the
@@ -354,10 +368,10 @@ def main():
 
     # Build a sane view of the transactions, filtering out a lot of
     # noise and making the result a little more uniform and sane.
-    # Also, start populating a list of PHIDs (Phabricator IDs used for 
+    # Also, start populating a list of PHIDs (Phabricator IDs used for
     # everything) in "phidstore".  In addition to storing the list of
-    # PHIDs to lookup, the phidstore acts as a class factory and 
-    # registry for objects that can be referenced by PHID. 
+    # PHIDs to lookup, the phidstore acts as a class factory and
+    # registry for objects that can be referenced by PHID.
     transactions = {}
     phidstore = PhidStore()
     for tasknum, taskfeed in activity.iteritems():
@@ -372,7 +386,7 @@ def main():
     taskstate = {}
     for task in transactions.keys():
         taskstate[task] = build_taskstate_from_transactions(
-                            transactions[task], start, end, config)
+            transactions[task], start, end, config)
         for actorphid in taskstate[task]['actorset']:
             assert actorphid
             phidstore.get_user(actorphid).tasks.append(task)
@@ -388,7 +402,8 @@ def main():
 
     # Spit out a text blob for each of the users.
     for phid, actor in phidstore.users.iteritems():
-        print render_actor(actor, phidstore, transactions, start, end, taskstate, config, taskstore),
+        print render_actor(actor, phidstore, transactions, start, end,
+                           taskstate, config, taskstore),
 
 if __name__ == "__main__":
     main()
