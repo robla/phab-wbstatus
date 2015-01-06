@@ -12,6 +12,7 @@ import argparse
 
 from datetime import datetime as dt
 from dateutil import tz
+from xml.sax.saxutils import escape, unescape
 
 
 def parse_arguments():
@@ -283,7 +284,8 @@ def build_taskstate_from_transactions(transactions, start, end, config):
 def render_actor(actor, phidstore, transactions, start, end, taskstate,
                  config, taskstore):
     wbstate = config['workboard_state_phids']
-    retval = "<li>" + actor.name + "\n"
+    retval = "<li class='userentry'><span class='user'>" + escape(actor.name)
+    retval += "</span>\n"
     retval += "<ul>\n"
     for task in actor.tasks:
         assignee = taskstate[task]['assignee']
@@ -312,7 +314,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
             # handled.
             elif (column.get('start') != column.get('end') and
                   column.get('end') != wbstate['feedback']):
-                taskval = "    <li>"
+                taskval = "    <li class='taskstatus'>"
                 if newitem:
                     taskval += "Assigned and "
                 if((column.get('start') == wbstate['todo'] or
@@ -329,7 +331,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                     taskval += phidstore.name(column['end']) + "\n"
                 taskarray.append(taskval)
             elif (status['start'] != status['end']):
-                taskval = "    <li>"
+                taskval = "    <li class='taskstatus'>"
                 if newitem:
                     taskval += "Assigned and "
                 if(column['start']):
@@ -337,16 +339,16 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                 taskval += status['end'] + "</li>\n"
                 taskarray.append(taskval)
             elif newitem:
-                taskarray.append("    <li>Assigned</li>\n")
+                taskarray.append("    <li class='taskstatus'>Assigned</li>\n")
         if (column.get('start') == wbstate['indev'] == column['end'] and
                 assignee.get('end') == actor.phid):
-            taskval = "    <li>Still working on it (since "
+            taskval = "    <li class='taskstatus'>Still working on it (since "
             taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
             taskval += ")</li>\n"
             taskarray.append(taskval)
         if (wbstate['feedback'] == column.get('end') and
                 assignee.get('end') == actor.phid):
-            taskval = "    <li>Waiting for feedback since "
+            taskval = "    <li class='taskstatus'>Waiting for feedback since "
             taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
             taskval += "</li>\n"
             taskarray.append(taskval)
@@ -356,8 +358,11 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
             retval += "  <li>"
             retval += "<a href='https://phabricator.wikimedia.org/T" + \
                 task + "'>"
+            retval += "<span class='tasknum'>"
             retval += "T" + task
-            retval += "</a>: <small>" + title + "</small>\n"
+            retval += "</span>:  "
+            retval += "<span class='tasktitle'>"
+            retval += escape(title) + "</span></a>\n"
             retval += "  <ul>\n"
             for line in taskarray:
                 retval += line
@@ -434,7 +439,45 @@ def main():
     taskstore.load_from_phabricator(phab, config['cachedir'])
 
     print """
-<html><body>
+<html>
+<head>
+ <style type="text/css">
+    body {
+        font-family: sans-serif;
+        font-size: 13px;
+        line-height: 18px;
+    }
+    .userentry {
+        margin-top: 8px;
+    }
+    .user {
+        color: #4B4D51;
+        font-weight: bold;
+        font-size: 13px;
+        vertical-align: bottom;
+    }
+    .tasknum {
+        color: #111;
+        font-weight: bold;
+    }
+    .tasktitle {
+        color: #6B748C;
+    }
+    a {
+        text-decoration: none;
+        color: #18559D;
+        cursor: pointer;
+    }
+    a:hover {
+        text-decoration: underline;
+    }
+    ul {
+        list-style-type: none;
+        padding-left:1em;
+    }
+ </style>
+</head>
+<body>
 <ul>
 """
     # Spit out a text blob for each of the users.
