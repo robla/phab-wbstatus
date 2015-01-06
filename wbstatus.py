@@ -310,10 +310,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                 pass
             # We have a change, so there's likely something interesting
             # to report
-            # TODO: handle "feedback" state the same way that "indev" is
-            # handled.
-            elif (column.get('start') != column.get('end') and
-                  column.get('end') != wbstate['feedback']):
+            elif (column.get('start') != column.get('end')):
                 taskval = "    <li class='taskstatus'>"
                 if newitem:
                     taskval += "Assigned and "
@@ -321,6 +318,8 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                     not column.get('start')) and
                    column['end'] == wbstate['indev']):
                     taskval += "Started</li>\n"
+                elif(column['end'] == wbstate['feedback']):
+                    taskval += "Asking for feedback</li>\n"
                 elif(column['end'] == wbstate['done'] or
                      column['end'] == wbstate['archive']):
                     taskval += "Completed</li>\n"
@@ -346,7 +345,8 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
             taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
             taskval += ")</li>\n"
             taskarray.append(taskval)
-        if (wbstate['feedback'] == column.get('end') and
+        if (column.get('start') == wbstate['feedback']
+                == column.get('end') and
                 assignee.get('end') == actor.phid):
             taskval = "    <li class='taskstatus'>Waiting for feedback since "
             taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
