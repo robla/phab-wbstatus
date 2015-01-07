@@ -54,7 +54,8 @@ def get_config():
     else:
         config['start'] = config['end'] - datetime.timedelta(days=1)
 
-    config['usecache'] = args.use_buggy_cache
+    if not args.use_buggy_cache:
+        config['cachedir'] = None
 
     return config
 
@@ -73,7 +74,7 @@ class PhidStore(object):
         self.phids.add(phid)
 
     def load_from_phabricator(self, phab, cachedir):
-        phidapifunc = lambda: phab.phid.query(phids=list(phids))
+        phidapifunc = lambda: phab.phid.query(phids=list(self.phids))
         self.query = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
 
     def name(self, phid):
@@ -109,6 +110,8 @@ class TaskStore(object):
             self.bytasknum[task['id']] = task
 
 
+# Yeah yeah, laugh it up at this tiny class, but there are big plans
+# in store for this.  BIG PLANS I TELL YOU!
 class User(object):
 
     def __init__(self, phid):
@@ -143,21 +146,6 @@ def parse_workboard_html(wbtime, wbhtmlcache):
     return retval
 
 
-# Take data structures representing the task states in two workboards,
-# and return a dict that contains the tasks for which the state changed
-# between the two workboards.  The contents of each item in the dict
-# should be a tuple with the old state and the new state.
-def get_workboard_diff(old_workboard, new_workboard):
-    allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
-    diff = {}
-    for key in allkeys:
-        oldvalue = old_workboard.get(key)
-        newvalue = new_workboard.get(key)
-        if oldvalue != newvalue:
-            diff[key] = (oldvalue, newvalue)
-    return diff
-
-
 # Pretty much the minimal wrapper around maniphest.gettasktransactions
 # to use the cache.
 def get_activity_for_tasks(phab, cachedir, tasknums):
@@ -172,12 +160,16 @@ def get_activity_for_tasks(phab, cachedir, tasknums):
 # based on named token.  Purging is entirely manual, even if the query
 # changes (no signature checking).
 def call_phab_via_cache(cachedir, key, apicall):
-    picklefile = os.path.join(cachedir, key + ".pickle")
-    try:
-        result = pickle.load(open(picklefile))
-    except IOError:
+    if not cachedir:
         result = apicall()
-        pickle.dump(result, open(picklefile, "wb"))
+    else:
+        print cachedir
+        picklefile = os.path.join(cachedir, key + ".pickle")
+        try:
+            result = pickle.load(open(picklefile))
+        except IOError:
+            result = apicall()
+            pickle.dump(result, open(picklefile, "wb"))
     return result
 
 
@@ -333,7 +325,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
                 taskval = "    <li class='taskstatus'>"
                 if newitem:
                     taskval += "Assigned and "
-                if(column['start']):
+                if(status['start']):
                     taskval += status['start'] + " -> "
                 taskval += status['end'] + "</li>\n"
                 taskarray.append(taskval)
@@ -392,8 +384,6 @@ def main():
     # workboard; skipping long-since archived issues).
     old_workboard = parse_workboard_html(start, config['htmlcachedir'])
     new_workboard = parse_workboard_html(end, config['htmlcachedir'])
-    # I think this can be deleted, since the diff isn't used anymore.
-    # diff = get_workboard_diff(old_workboard, new_workboard)
     allkeys = list(set(old_workboard.keys()).union(new_workboard.keys()))
     alltasknums = [int(string.lstrip(x, "T")) for x in allkeys]
 
@@ -481,7 +471,8 @@ def main():
 <ul>
 """
     # Spit out a text blob for each of the users.
-    for phid, actor in phidstore.users.iteritems():
+    for phid in config['team'].keys():
+        actor = phidstore.users[phid]
         print render_actor(actor, phidstore, transactions, start, end,
                            taskstate, config, taskstore),
     print """
