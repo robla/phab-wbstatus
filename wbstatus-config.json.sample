@@ -1,0 +1,135 @@
+{
+    "cachedir": "some-local-empty-directory", 
+    "htmlcachedir": "directory-full-of-downloaded-workboards", 
+    "team": {
+        "PHID-USER-2rnfxoezl66afpa7w7in": {
+            "image": "https://phab.wmfusercontent.org/file/data/zaud5ttp7pwzbtwjdkjn/PHID-FILE-uiymymk3h7ozkn5xanon/profile-SC2-08_copy.png", 
+            "phid": "PHID-USER-2rnfxoezl66afpa7w7in", 
+            "realName": "Nik Everett", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/Manybubbles/", 
+            "userName": "Manybubbles"
+        }, 
+        "PHID-USER-4qe5niesec534hksvuch": {
+            "image": "https://phab.wmfusercontent.org/file/data/ipcbt6bwwnsb4dxy7vm4/PHID-FILE-ikenvecspc2h46fgu3zt/profile-ring_image.jpg", 
+            "phid": "PHID-USER-4qe5niesec534hksvuch", 
+            "realName": "Stas Malyshev", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/Smalyshev/", 
+            "userName": "Smalyshev"
+        }, 
+        "PHID-USER-bmbmvb2e5bg6ztcangbq": {
+            "image": "https://phab.wmfusercontent.org/file/data/kd4xv6kmiqlmbg5i3ynf/PHID-FILE-q756a47n7hkxmwqviotl/profile-profile.jpg", 
+            "phid": "PHID-USER-bmbmvb2e5bg6ztcangbq", 
+            "realName": "Aaron Schulz", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/aaron/", 
+            "userName": "aaron"
+        }, 
+        "PHID-USER-doeppszazlm3r7xah4il": {
+            "image": "https://phab.wmfusercontent.org/file/data/jlcvy62mwb45sgg3gmyy/PHID-FILE-fav4t57rgkt3cl5ix3k7/profile-Teacup.png", 
+            "phid": "PHID-USER-doeppszazlm3r7xah4il", 
+            "realName": "Chris Steipp", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/csteipp/", 
+            "userName": "csteipp"
+        }, 
+        "PHID-USER-k6tmz5ylx4rzfl3bitse": {
+            "image": "https://phab.wmfusercontent.org/res/phabricator/3eb28cd9/rsrc/image/avatar.png", 
+            "phid": "PHID-USER-k6tmz5ylx4rzfl3bitse", 
+            "realName": "Tim Starling", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/tstarling/", 
+            "userName": "tstarling"
+        }, 
+        "PHID-USER-ll6tmaogat2b5q7tnqas": {
+            "image": "https://phab.wmfusercontent.org/file/data/bvxqvkkifd6alieq2xbu/PHID-FILE-nylxbdwzwsmng5r2excr/profile-angry-mohawk-unicorn-head.png", 
+            "phid": "PHID-USER-ll6tmaogat2b5q7tnqas", 
+            "realName": "Bryan Davis", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/bd808/", 
+            "userName": "bd808"
+        }, 
+        "PHID-USER-oetk6bbl6omm354ejz3b": {
+            "image": "https://phab.wmfusercontent.org/file/data/zaod42cwtzbrrgftnmxw/PHID-FILE-xbrgidvvvk5mrjdpplam/profile-dragon.jpg", 
+            "phid": "PHID-USER-oetk6bbl6omm354ejz3b", 
+            "realName": "Chad Horohoe", 
+            "roles": [
+                "admin", 
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/Chad/", 
+            "userName": "Chad"
+        }, 
+        "PHID-USER-r7wrkcx7j2vutqs6hr3g": {
+            "image": "https://phab.wmfusercontent.org/file/data/22rfxlrgt5lsoxl5b5we/PHID-FILE-nqcwxea75w2qihkrebwv/profile-profile.jpg", 
+            "phid": "PHID-USER-r7wrkcx7j2vutqs6hr3g", 
+            "realName": "Ori Livneh", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/ori/", 
+            "userName": "ori"
+        }, 
+        "PHID-USER-uqcn2l4ng4murmyfnvyp": {
+            "image": "https://phab.wmfusercontent.org/file/data/e6rtk2xyv74okmgmqocp/PHID-FILE-u2sbdoxvztewoijglk4b/profile-Brad_Jorsch-3.jpg", 
+            "phid": "PHID-USER-uqcn2l4ng4murmyfnvyp", 
+            "realName": "Brad Jorsch", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/Anomie/", 
+            "userName": "Anomie"
+        }, 
+        "PHID-USER-v7vgzvvcw7v2umf737ri": {
+            "image": "https://phab.wmfusercontent.org/file/data/rnekaj3x7mxskq6jbkio/PHID-FILE-km5f3hjtsaae5mukcxwg/profile-avatar.png", 
+            "phid": "PHID-USER-v7vgzvvcw7v2umf737ri", 
+            "realName": "Legoktm", 
+            "roles": [
+                "verified", 
+                "approved", 
+                "activated"
+            ], 
+            "uri": "https://phabricator.wikimedia.org/p/Legoktm/", 
+            "userName": "Legoktm"
+        }
+    }, 
+    "teamphid": "PHID-PROJ-oft3zinwvih7bgdhpfgj", 
+    "workboard_state_phids": {
+        "archive": "PHID-PCOL-vdldqhpp2qukxikpf4zf", 
+        "done": "PHID-PCOL-vhdu7nnvhs6c76axdswy", 
+        "feedback": "PHID-PCOL-nwvtvi6b6rq32opevo7o", 
+        "indev": "PHID-PCOL-hw5bskuzbvvef2zihx6r", 
+        "todo": "PHID-PCOL-7w2pgpuac4mxaqtjbso3"
+    }
+}
