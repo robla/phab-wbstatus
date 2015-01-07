@@ -239,7 +239,7 @@ def build_taskstate_from_transactions(transactions, start, end, config):
         # d->e
         # ---END
         # Old should be "c" and new should be "e"
-        # TODO: make a series of unit tests out of this
+        # (see unit test for example)
         tmap = {'projectcolumn': 'column',
                 'status': 'status',
                 'reassign': 'assignee',
