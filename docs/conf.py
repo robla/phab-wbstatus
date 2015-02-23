@@ -17,7 +17,6 @@ release = version
 exclude_patterns = ['_build']
 pygments_style = 'sphinx'
 html_theme = 'nature'
-html_static_path = ['_static']
 htmlhelp_basename = 'wbstatusdoc'
 
 autodoc_default_flags = ['members', 'private-members', 'special-members']
