@@ -88,10 +88,9 @@ class PhidStore(object):
         self.phids.add(phid)
 
     def load_from_phabricator(self, phab, cachedir):
-        def phidapifunc():
-            phab.phid.query(phids=list(self.phids))
-
-        self.query = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
+        self.query = call_phab_via_cache(
+            cachedir, "phidquery",
+            lambda: phab.phid.query(phids=list(self.phids)))
 
     def name(self, phid):
         try:
@@ -118,11 +117,9 @@ class TaskStore(object):
         self.tasknums = tasknums
 
     def load_from_phabricator(self, phab, cachedir):
-        def taskquerycall():
-            phab.maniphest.query(ids=self.tasknums)
-
         self.query = call_phab_via_cache(
-            cachedir, "taskquery", taskquerycall)
+            cachedir, "taskquery",
+            lambda: phab.maniphest.query(ids=self.tasknums))
         self.bytasknum = {}
         for phid, task in self.query.iteritems():
             self.bytasknum[task['id']] = task
@@ -170,11 +167,9 @@ def get_activity_for_tasks(phab, cachedir, tasknums):
     """Pretty much the minimal wrapper around maniphest.gettasktransactions to
     use the cache.
     """
-    def activityquery():
-        phab.maniphest.gettasktransactions(ids=tasknums)
-
     activity = call_phab_via_cache(
-        cachedir, "gettasktransactions", activityquery)
+        cachedir, "gettasktransactions",
+        lambda: phab.maniphest.gettasktransactions(ids=tasknums))
     return activity
 
 
