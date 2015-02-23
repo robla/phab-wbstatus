@@ -1,0 +1,10 @@
+*.pyc
+*/*.egg-info
+/*.egg
+/.coverage
+/.tox
+/.venv
+/build
+/dist
+/docs/_build
+/wbstatus-config.json
