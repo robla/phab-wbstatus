@@ -15,19 +15,16 @@
 # limitations under the License.
 
 
+import argparse
 from bs4 import BeautifulSoup
-import phabricator
-import json
+from xml.sax.saxutils import escape
 import datetime
 import dateutil.parser
+import json
 import os
-import string
+import phabricator
 import pickle
-import argparse
-
-from datetime import datetime as dt
-from dateutil import tz
-from xml.sax.saxutils import escape, unescape
+import string
 
 
 def parse_arguments():
@@ -49,9 +46,10 @@ def parse_arguments():
     return parser.parse_args()
 
 
-# Read command line options and merge with whatever config file exists
-# to create a config object we can lob around.
 def get_config():
+    """Read command line options and merge with whatever config file exists to
+    create a config object we can lob around.
+    """
     args = parse_arguments()
 
     with open(args.config) as fh:
@@ -75,11 +73,12 @@ def get_config():
     return config
 
 
-# Keep track of all of the objects with associated PHIDs.  Aggregate all of
-# PHIDs so that we only need to make one call to Phabricator.phid.query to
-# lookup a big batch of PHIDs, rather than making dozens/hundreds of calls to
-# look them up one at a time.
 class PhidStore(object):
+    """Keep track of all of the objects with associated PHIDs.  Aggregate all
+    of PHIDs so that we only need to make one call to Phabricator.phid.query
+    to lookup a big batch of PHIDs, rather than making dozens/hundreds of
+    calls to look them up one at a time.
+    """
 
     def __init__(self):
         self.phids = set()
@@ -89,8 +88,9 @@ class PhidStore(object):
         self.phids.add(phid)
 
     def load_from_phabricator(self, phab, cachedir):
-        phidapifunc = lambda: phab.phid.query(phids=list(self.phids))
-        self.query = call_phab_via_cache(cachedir, "phidquery", phidapifunc)
+        self.query = call_phab_via_cache(
+            cachedir, "phidquery",
+            lambda: phab.phid.query(phids=list(self.phids)))
 
     def name(self, phid):
         try:
@@ -106,28 +106,29 @@ class PhidStore(object):
         return retval
 
 
-# the TaskStore is a wrapper around the Phabricator manifest.query
-# API call, so this object indexes the result by task number.  This
-# is necessary because the Phabricator API inexplicably doesn't
-# return the result in such a way that the tasks can be easily
-# looked up by task number.
 class TaskStore(object):
+    """The TaskStore is a wrapper around the Phabricator manifest.query API
+    call, so this object indexes the result by task number.  This is necessary
+    because the Phabricator API inexplicably doesn't return the result in such
+    a way that the tasks can be easily looked up by task number.
+    """
 
     def __init__(self, tasknums=set()):
         self.tasknums = tasknums
 
     def load_from_phabricator(self, phab, cachedir):
-        taskquerycall = lambda: phab.maniphest.query(ids=self.tasknums)
         self.query = call_phab_via_cache(
-            cachedir, "taskquery", taskquerycall)
+            cachedir, "taskquery",
+            lambda: phab.maniphest.query(ids=self.tasknums))
         self.bytasknum = {}
         for phid, task in self.query.iteritems():
             self.bytasknum[task['id']] = task
 
 
-# Yeah yeah, laugh it up at this tiny class, but there are big plans
-# in store for this.  BIG PLANS I TELL YOU!
 class User(object):
+    """Yeah yeah, laugh it up at this tiny class, but there are big plans in
+    store for this.  BIG PLANS I TELL YOU!
+    """
 
     def __init__(self, phid):
         assert phid
@@ -140,12 +141,13 @@ class User(object):
         return self.phidstore.name(self.phid)
 
 
-# Scrape the HTML for a Phabricator workboard, and return a simple dict
-# that represents the workboard.  The HTML is pre-retrieved via cron job
-# that snarfs the HTML as much as hourly.  This function accesses the
-# cache via timestamp, which is rounded to the nearest hour in the file
-# name.
 def parse_workboard_html(wbtime, wbhtmlcache):
+    """Scrape the HTML for a Phabricator workboard, and return a simple dict
+    that represents the workboard.  The HTML is pre-retrieved via cron job
+    that snarfs the HTML as much as hourly.  This function accesses the cache
+    via timestamp, which is rounded to the nearest hour in the file name.
+    """
+
     # File name will look something like workboard-2014-12-22T00.html,
     # which corresponds to midnight on 2014-12-22
     filename = 'workboard-{:%Y-%m-%dT%H%Z}.html'.format(wbtime)
@@ -161,20 +163,22 @@ def parse_workboard_html(wbtime, wbhtmlcache):
     return retval
 
 
-# Pretty much the minimal wrapper around maniphest.gettasktransactions
-# to use the cache.
 def get_activity_for_tasks(phab, cachedir, tasknums):
-    activityquery = lambda: phab.maniphest.gettasktransactions(ids=tasknums)
+    """Pretty much the minimal wrapper around maniphest.gettasktransactions to
+    use the cache.
+    """
     activity = call_phab_via_cache(
-        cachedir, "gettasktransactions", activityquery)
+        cachedir, "gettasktransactions",
+        lambda: phab.maniphest.gettasktransactions(ids=tasknums))
     return activity
 
 
-# Really lame overzealous caching implementation that's only currently
-# useful as a developer convenience.  It stores queries to Phabricator
-# based on named token.  Purging is entirely manual, even if the query
-# changes (no signature checking).
 def call_phab_via_cache(cachedir, key, apicall):
+    """Really lame overzealous caching implementation that's only currently
+    useful as a developer convenience.  It stores queries to Phabricator based
+    on named token.  Purging is entirely manual, even if the query changes (no
+    signature checking).
+    """
     if not cachedir:
         result = apicall()
     else:
@@ -188,12 +192,13 @@ def call_phab_via_cache(cachedir, key, apicall):
     return result
 
 
-# Return an item if it's relevant to our current search, or {} if it isn't.
-# Also populate the PHIDs that will eventually need to be resolved.
-# There's a fair amount of logic here for making the return value a bit
-# more uniform than what is passed in.
-# TODO: pass in MWCORETEAM_PHID instead of relying on global constant.
 def get_filtered_transactions_for_task(taskfeed, phidstore, teamphid):
+    """Return an item if it's relevant to our current search, or {} if it
+    isn't. Also populate the PHIDs that will eventually need to be resolved.
+    There's a fair amount of logic here for making the return value a bit more
+    uniform than what is passed in.
+    """
+    # TODO: pass in MWCORETEAM_PHID instead of relying on global constant.
     transactions = []
     for tact in taskfeed:
         item = {}
@@ -229,11 +234,12 @@ def get_filtered_transactions_for_task(taskfeed, phidstore, teamphid):
     return transactions
 
 
-# Walk through the transactions and build up the state for a particular
-# task at each end of the interval defined by "start" and "end".
-# Also keep track of how long tasks have been in the "In Dev" and
-# "Waiting for Review/Feedback" columns.
 def build_taskstate_from_transactions(transactions, start, end, config):
+    """Walk through the transactions and build up the state for a particular
+    task at each end of the interval defined by "start" and "end". Also keep
+    track of how long tasks have been in the "In Dev" and "Waiting for
+    Review/Feedback" columns.
+    """
     taskstate = {'column': {},
                  'status': {},
                  'assignee': {},
@@ -241,7 +247,9 @@ def build_taskstate_from_transactions(transactions, start, end, config):
     taskstate['actorset'] = set()
     wbstate = config['workboard_state_phids']
     for tact in transactions:
-        ttime = dt.fromtimestamp(tact['timestamp'], tz.tzutc())
+        ttime = datetime.datetime.fromtimestamp(
+            tact['timestamp'], dateutil.tz.tzutc()
+        )
         if ttime > end:
             break
         # For each type, build the "old" and "new" state along the
@@ -281,15 +289,16 @@ def build_taskstate_from_transactions(transactions, start, end, config):
     return taskstate
 
 
-# Return an HTML blob for a given user ("actor"), performing the many
-# contortions necessary to have something read more-or-less like plain
-# English.  The goal of this software is to present a simple view of
-# things, so precision is compromised in the name of clarity and
-# highlighting what's important.
-# TODO: switch to bottle.SimpleTemplate or some other HTML template
-# solution
 def render_actor(actor, phidstore, transactions, start, end, taskstate,
                  config, taskstore):
+    """Return an HTML blob for a given user ("actor"), performing the many
+    contortions necessary to have something read more-or-less like plain
+    English.  The goal of this software is to present a simple view of things,
+    so precision is compromised in the name of clarity and highlighting what's
+    important.
+    """
+    # TODO: switch to bottle.SimpleTemplate or some other HTML template
+    # solution
     wbstate = config['workboard_state_phids']
     retval = "<li class='userentry'><span class='user'>" + escape(actor.name)
     retval += "</span>\n"
@@ -352,8 +361,7 @@ def render_actor(actor, phidstore, transactions, start, end, taskstate,
             taskval += taskstate[task]['workingsince'].strftime("%a, %b %d")
             taskval += ")</li>\n"
             taskarray.append(taskval)
-        if (column.get('start') == wbstate['feedback']
-                == column.get('end') and
+        if (column.get('start') == wbstate['feedback'] == column.get('end') and
                 assignee.get('end') == actor.phid):
             taskval = "    <li class='taskstatus'>Waiting for feedback since "
             taskval += taskstate[task]['waitingsince'].strftime("%a, %b %d")
