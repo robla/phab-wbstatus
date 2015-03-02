@@ -495,9 +495,12 @@ def main():
 """
     # Spit out a text blob for each of the users.
     for phid in config['team'].keys():
-        actor = phidstore.users[phid]
-        print render_actor(actor, phidstore, transactions, start, end,
-                           taskstate, config, taskstore),
+        try:
+            actor = phidstore.users[phid]
+            print render_actor(actor, phidstore, transactions, start, end,
+                            taskstate, config, taskstore),
+        except KeyError:
+            pass
     print """
 </ul>
 </body></html>
